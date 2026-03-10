@@ -1,13 +1,19 @@
-// dashboard/public/scanner/awaband-panel.js
+// AWABAND Panel — Vertical Equalizer HUD
+// Biophotonic Medical Interface
 
 const PARAM_COLORS = [
-  '#ff6b8a', '#ff9f5a', '#ffd06b', '#5ae8b0',
-  '#5ac8ff', '#8b8aff', '#c77dff'
+  '#ff3366', '#ff7a2e', '#ffcc00', '#00ff99',
+  '#00ccff', '#6677ff', '#bb44ff'
 ];
 
 const PARAM_NAMES = [
   'Стабильность', 'Поток', 'Энергия', 'Резонанс',
   'Вибрация', 'Ясность', 'Целостность'
+];
+
+const PARAM_SHORT = [
+  'STAB', 'FLOW', 'ENRG', 'RSNC',
+  'VIBR', 'CLRT', 'INTG'
 ];
 
 const PARAM_KEYS = [
@@ -74,10 +80,12 @@ const PARAM_DESCRIPTIONS = [
   }
 ];
 
+export { PARAM_COLORS, PARAM_NAMES, PARAM_KEYS };
+
 export class AwabandPanel {
   constructor(container) {
     this.container = container;
-    this.bars = [];
+    this.cols = [];
     this.luminosityEl = null;
     this.tooltip = null;
     this.activeTooltip = -1;
@@ -93,35 +101,53 @@ export class AwabandPanel {
     this.luminosityEl.className = 'luminosity';
     this.container.appendChild(this.luminosityEl);
 
-    // 7 bars
+    // Vertical equalizer grid
     const grid = document.createElement('div');
     grid.className = 'param-grid';
 
     for (let i = 0; i < 7; i++) {
-      const row = document.createElement('div');
-      row.className = 'param-row';
-      row.innerHTML = `
-        <span class="param-name">${PARAM_NAMES[i]}</span>
-        <div class="param-bar-track">
-          <div class="param-bar-fill" style="background:${PARAM_COLORS[i]}"></div>
-        </div>
-        <span class="param-value">—</span>
-      `;
-      row.addEventListener('click', (e) => {
+      const col = document.createElement('div');
+      col.className = 'param-col';
+
+      // Vertical stick track
+      const track = document.createElement('div');
+      track.className = 'param-stick-track';
+
+      const fill = document.createElement('div');
+      fill.className = 'param-stick-fill';
+      fill.style.background = `linear-gradient(to top, ${PARAM_COLORS[i]}44, ${PARAM_COLORS[i]})`;
+      fill.style.color = PARAM_COLORS[i];
+      track.appendChild(fill);
+      col.appendChild(track);
+
+      // Label
+      const label = document.createElement('div');
+      label.className = 'param-label';
+      label.textContent = PARAM_SHORT[i];
+      col.appendChild(label);
+
+      // Value
+      const val = document.createElement('div');
+      val.className = 'param-val';
+      val.textContent = '—';
+      col.appendChild(val);
+
+      col.addEventListener('click', (e) => {
         e.stopPropagation();
         this._toggleTooltip(i);
       });
-      grid.appendChild(row);
-      this.bars.push(row);
+
+      grid.appendChild(col);
+      this.cols.push(col);
     }
 
     this.container.appendChild(grid);
 
-    // Tooltip element
+    // Tooltip element — appended to body to escape clip-path
     this.tooltip = document.createElement('div');
     this.tooltip.className = 'param-tooltip';
     this.tooltip.style.display = 'none';
-    this.container.appendChild(this.tooltip);
+    document.body.appendChild(this.tooltip);
 
     // Close tooltip on outside click
     document.addEventListener('click', () => this._hideTooltip());
@@ -140,9 +166,9 @@ export class AwabandPanel {
         <span class="tooltip-title">${info.title}</span>
         <span class="tooltip-freq">${info.freq}</span>
       </div>
-      <div class="tooltip-meta">${info.body} · Студия ${info.studio}</div>
+      <div class="tooltip-meta">${info.body} \u00b7 \u0421\u0442\u0443\u0434\u0438\u044f ${info.studio}</div>
       <div class="tooltip-desc">${info.desc}</div>
-      <div class="tooltip-source">Источник: ${info.source}</div>
+      <div class="tooltip-source">\u0418\u0441\u0442\u043e\u0447\u043d\u0438\u043a: ${info.source}</div>
     `;
     this.tooltip.style.display = 'block';
   }
@@ -155,17 +181,17 @@ export class AwabandPanel {
   update(params) {
     PARAM_KEYS.forEach((key, i) => {
       const value = params[key];
-      const fill = this.bars[i].querySelector('.param-bar-fill');
-      const label = this.bars[i].querySelector('.param-value');
-      fill.style.width = `${value}%`;
-      label.textContent = `${value}`;
+      const fill = this.cols[i].querySelector('.param-stick-fill');
+      const val = this.cols[i].querySelector('.param-val');
+      fill.style.height = `${value}%`;
+      val.textContent = `${value}`;
     });
 
     if (this.luminosityEl) {
-      this.luminosityEl.textContent = `Светимость: ${params.luminosity}`;
-      const hue = 80 + (params.luminosity / 100) * 40;
-      const sat = 40 + (params.luminosity / 100) * 40;
-      const light = 30 + (params.luminosity / 100) * 30;
+      this.luminosityEl.textContent = `\u0421\u0412\u0415\u0422\u0418\u041c\u041e\u0421\u0422\u042c: ${params.luminosity}`;
+      const hue = 160 + (params.luminosity / 100) * 20;
+      const sat = 60 + (params.luminosity / 100) * 30;
+      const light = 25 + (params.luminosity / 100) * 35;
       this.luminosityEl.style.color = `hsl(${hue}, ${sat}%, ${light}%)`;
     }
   }

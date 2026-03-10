@@ -1,4 +1,4 @@
-// AWABAND Scanner — Biofield Analysis Interface
+// AWABAND Scanner — Biophotonic Medical HUD
 // Awaterra 2225 Universe
 
 import { startCamera, stopCamera, getForeheadROI, extractROIPixels } from './camera.js';
@@ -22,8 +22,9 @@ let lastBiofield = null;
 let smoothedBiofield = null;
 let lastHR = null;
 let frameCount = 0;
+let scanStartTime = null;
 
-const EMA_ALPHA = 0.15; // smoothing factor: lower = smoother (0.1-0.3 good range)
+const EMA_ALPHA = 0.15;
 
 /** Exponential moving average for biofield parameters */
 function smoothBiofield(raw, prev) {
@@ -62,8 +63,19 @@ function buildSplash() {
   const screen = el('div', 'screen active');
   screen.id = 'splash';
 
-  // Orb
-  screen.appendChild(el('div', 'splash-orb'));
+  // Background elements
+  screen.appendChild(el('div', 'bg-mesh'));
+  screen.appendChild(el('div', 'bg-noise'));
+  screen.appendChild(el('div', 'bg-grid'));
+
+  // Concentric sonar rings
+  const rings = el('div', 'splash-rings');
+  for (let i = 0; i < 4; i++) {
+    rings.appendChild(el('div', 'splash-ring'));
+  }
+  // Radar sweep line
+  rings.appendChild(el('div', 'splash-scanline'));
+  screen.appendChild(rings);
 
   // Brand
   const brand = el('div', 'splash-brand');
@@ -71,7 +83,7 @@ function buildSplash() {
   screen.appendChild(brand);
 
   // Version
-  screen.appendChild(el('div', 'splash-version', { text: 'Biofield Scanner v2225.7' }));
+  screen.appendChild(el('div', 'splash-version', { text: 'BIOFIELD SCANNER // v2225.7' }));
 
   // Start button
   const btn = el('button', 'splash-btn');
@@ -81,7 +93,7 @@ function buildSplash() {
   screen.appendChild(btn);
 
   // Footer
-  screen.appendChild(el('div', 'splash-footer', { text: 'AWATERRA DYNAMICS // MED-TECH DIVISION' }));
+  screen.appendChild(el('div', 'splash-footer', { text: 'AWATERRA DYNAMICS \u00b7 MED-TECH DIVISION \u00b7 2225' }));
 
   return screen;
 }
@@ -91,37 +103,85 @@ function buildScanning() {
   const screen = el('div', 'screen');
   screen.id = 'scanning';
 
-  // Video element (camera feed)
+  // ── Top bar: back + status + guide + stop ──
+  const topbar = el('div', 'scan-topbar');
+
+  const backBtn = el('button', 'scan-back-btn', { text: '\u2190' });
+  backBtn.addEventListener('click', () => stopScanning(true));
+  topbar.appendChild(backBtn);
+
+  const status = el('div', 'scan-status', { text: '\u041a\u0430\u043b\u0438\u0431\u0440\u043e\u0432\u043a\u0430...' });
+  status.id = 'scan-status';
+  topbar.appendChild(status);
+
+  const guideBtn = el('button', 'scan-guide-btn', { text: '?' });
+  guideBtn.addEventListener('click', () => toggleGuideOverlay());
+  topbar.appendChild(guideBtn);
+
+  const stopBtn = el('button', 'scan-stop-btn', { html: '&#9632;' });
+  stopBtn.addEventListener('click', () => stopScanning());
+  topbar.appendChild(stopBtn);
+
+  screen.appendChild(topbar);
+
+  // ── Camera viewport (contained) ──
+  const viewport = el('div', 'scan-viewport');
+
   const video = el('video', 'scan-video', { playsinline: '', autoplay: '' });
   video.id = 'scan-video';
   video.muted = true;
-  screen.appendChild(video);
+  viewport.appendChild(video);
 
   // Aura overlay canvas
   const auraCanvas = el('canvas', 'scan-aura-canvas');
   auraCanvas.id = 'scan-aura-canvas';
-  screen.appendChild(auraCanvas);
+  viewport.appendChild(auraCanvas);
 
   // Hidden offscreen canvas for pixel extraction
   const offscreen = el('canvas', '');
   offscreen.id = 'scan-offscreen';
   offscreen.style.display = 'none';
-  screen.appendChild(offscreen);
+  viewport.appendChild(offscreen);
 
-  // Status indicator
-  const status = el('div', 'scan-status', { text: 'Калибровка...' });
-  status.id = 'scan-status';
-  screen.appendChild(status);
+  // HUD overlay — inside viewport
+  const hud = el('div', 'hud-overlay');
+  hud.appendChild(el('div', 'hud-corner hud-corner--tl'));
+  hud.appendChild(el('div', 'hud-corner hud-corner--tr'));
+  hud.appendChild(el('div', 'hud-corner hud-corner--bl'));
+  hud.appendChild(el('div', 'hud-corner hud-corner--br'));
+  hud.appendChild(el('div', 'hud-scanline'));
 
-  // Stop button
-  const stopBtn = el('button', 'scan-stop-btn', { html: '&#9632;' });
-  stopBtn.addEventListener('click', () => stopScanning());
-  screen.appendChild(stopBtn);
+  const reticle = el('div', 'hud-reticle');
+  reticle.appendChild(el('div', 'hud-reticle-ring'));
+  hud.appendChild(reticle);
 
-  // AWABAND panel container
+  const dataTL = el('div', 'hud-data hud-data--tl');
+  dataTL.id = 'hud-data-tl';
+  dataTL.textContent = 'SIG: ---';
+  hud.appendChild(dataTL);
+
+  const dataTR = el('div', 'hud-data hud-data--tr');
+  dataTR.id = 'hud-data-tr';
+  dataTR.textContent = 'T+00:00';
+  hud.appendChild(dataTR);
+
+  // Pulse indicator (bottom of viewport)
+  const pulse = el('div', 'pulse-indicator');
+  const pulseBar = el('div', 'pulse-indicator-bar');
+  pulseBar.id = 'pulse-bar';
+  pulse.appendChild(pulseBar);
+  hud.appendChild(pulse);
+
+  viewport.appendChild(hud);
+  screen.appendChild(viewport);
+
+  // ── AWABAND panel (below viewport) ──
   const panelDiv = el('div', '');
   panelDiv.id = 'scan-panel';
   screen.appendChild(panelDiv);
+
+  // ── Guide overlay ──
+  screen.appendChild(buildGuideOverlay());
 
   return screen;
 }
@@ -146,10 +206,10 @@ function buildResult() {
   // Action buttons
   const actions = el('div', 'result-actions');
 
-  const newScanBtn = el('button', 'result-btn', { text: 'Новое сканирование' });
+  const newScanBtn = el('button', 'result-btn', { text: '\u041d\u043e\u0432\u043e\u0435 \u0441\u043a\u0430\u043d\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435' });
   newScanBtn.addEventListener('click', () => showScreen('splash'));
 
-  const saveBtn = el('button', 'result-btn result-btn-primary', { text: 'Сохранить' });
+  const saveBtn = el('button', 'result-btn result-btn-primary', { text: '\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c' });
   saveBtn.addEventListener('click', () => saveSnapshot());
 
   actions.appendChild(newScanBtn);
@@ -159,15 +219,180 @@ function buildResult() {
   return screen;
 }
 
+/** Toggle guide overlay visibility */
+function toggleGuideOverlay() {
+  const overlay = document.getElementById('guide-overlay');
+  if (!overlay) return;
+  overlay.classList.toggle('open');
+}
+
+/** Build guide overlay (inside scanning screen) */
+function buildGuideOverlay() {
+  const overlay = el('div', 'guide-overlay');
+  overlay.id = 'guide-overlay';
+
+  // Backdrop (click to close)
+  const backdrop = el('div', 'guide-backdrop');
+  backdrop.addEventListener('click', () => toggleGuideOverlay());
+  overlay.appendChild(backdrop);
+
+  const panel = el('div', 'guide-panel');
+  const inner = el('div', 'guide-scroll');
+
+  // Header
+  const header = el('div', 'guide-header');
+  header.appendChild(el('div', 'guide-title', { text: '\u041a\u0430\u043a \u044d\u0442\u043e \u0440\u0430\u0431\u043e\u0442\u0430\u0435\u0442' }));
+  const closeBtn = el('button', 'guide-close', { text: '\u2715' });
+  closeBtn.addEventListener('click', () => toggleGuideOverlay());
+  header.appendChild(closeBtn);
+  inner.appendChild(header);
+
+  // Intro
+  inner.appendChild(el('p', 'guide-intro', {
+    text: 'AWABAND Scanner \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0435\u0442 \u043a\u0430\u043c\u0435\u0440\u0443 \u0438 \u043c\u0438\u043a\u0440\u043e\u0444\u043e\u043d \u0442\u0435\u043b\u0435\u0444\u043e\u043d\u0430 \u0434\u043b\u044f \u0430\u043d\u0430\u043b\u0438\u0437\u0430 \u0440\u0435\u0430\u043b\u044c\u043d\u044b\u0445 \u0444\u0438\u0437\u0438\u043e\u043b\u043e\u0433\u0438\u0447\u0435\u0441\u043a\u0438\u0445 \u0441\u0438\u0433\u043d\u0430\u043b\u043e\u0432 \u0438 \u043f\u0435\u0440\u0435\u0432\u043e\u0434\u0438\u0442 \u0438\u0445 \u0432 7 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u043e\u0432 \u0431\u0438\u043e\u043f\u043e\u043b\u044f \u0432\u0441\u0435\u043b\u0435\u043d\u043d\u043e\u0439 Awaterra.'
+  }));
+
+  // ── SECTION 1: Camera ──
+  const camSec = el('div', 'guide-section');
+  camSec.innerHTML = `
+    <div class="guide-section-title">\ud83d\udcf7 \u041a\u0430\u043c\u0435\u0440\u0430: \u043f\u0443\u043b\u044c\u0441 \u0447\u0435\u0440\u0435\u0437 \u043a\u043e\u0436\u0443</div>
+    <p class="guide-section-text">\u041a\u043e\u0436\u0430 \u043b\u0438\u0446\u0430 \u0447\u0443\u0442\u044c-\u0447\u0443\u0442\u044c \u043c\u0435\u043d\u044f\u0435\u0442 \u0446\u0432\u0435\u0442 \u0441 \u043a\u0430\u0436\u0434\u044b\u043c \u0443\u0434\u0430\u0440\u043e\u043c \u0441\u0435\u0440\u0434\u0446\u0430 \u2014 \u043a\u0440\u043e\u0432\u044c \u043f\u0440\u0438\u043b\u0438\u0432\u0430\u0435\u0442 \u0438 \u043e\u0442\u043b\u0438\u0432\u0430\u0435\u0442. \u042d\u0442\u043e \u043d\u0435\u0432\u0438\u0434\u0438\u043c\u043e \u0433\u043b\u0430\u0437\u0443, \u043d\u043e \u043a\u0430\u043c\u0435\u0440\u0430 \u043b\u043e\u0432\u0438\u0442 \u044d\u0442\u0438 \u043c\u0438\u043a\u0440\u043e\u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f \u0432 RGB-\u043a\u0430\u043d\u0430\u043b\u0430\u0445.</p>
+    <p class="guide-section-text">\u041c\u044b \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0435\u043c \u0430\u043b\u0433\u043e\u0440\u0438\u0442\u043c <strong>CHROM</strong> (Chrominance-based), \u0440\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u0430\u043d\u043d\u044b\u0439 \u0438\u0441\u0441\u043b\u0435\u0434\u043e\u0432\u0430\u0442\u0435\u043b\u044f\u043c\u0438 <em>De Haan \u0438 Jeanne</em> \u0432 Philips Research (2013). \u041e\u043d \u0440\u0430\u0437\u0434\u0435\u043b\u044f\u0435\u0442 \u0446\u0432\u0435\u0442\u043e\u0432\u044b\u0435 \u043a\u0430\u043d\u0430\u043b\u044b \u043a\u043e\u0436\u0438 \u0442\u0430\u043a, \u0447\u0442\u043e\u0431\u044b \u043e\u0442\u0434\u0435\u043b\u0438\u0442\u044c \u043f\u0443\u043b\u044c\u0441\u043e\u0432\u044b\u0439 \u0441\u0438\u0433\u043d\u0430\u043b \u043e\u0442 \u0448\u0443\u043c\u0430 \u0438 \u0434\u0432\u0438\u0436\u0435\u043d\u0438\u044f.</p>
+    <p class="guide-section-text">\u0418\u0437 \u043f\u0443\u043b\u044c\u0441\u043e\u0432\u043e\u0433\u043e \u0441\u0438\u0433\u043d\u0430\u043b\u0430 \u043c\u044b \u0438\u0437\u0432\u043b\u0435\u043a\u0430\u0435\u043c:</p>
+    <ul class="guide-list">
+      <li><strong>HR</strong> \u2014 \u0447\u0430\u0441\u0442\u043e\u0442\u0443 \u043f\u0443\u043b\u044c\u0441\u0430 \u0447\u0435\u0440\u0435\u0437 \u0441\u043f\u0435\u043a\u0442\u0440\u0430\u043b\u044c\u043d\u044b\u0439 \u0430\u043d\u0430\u043b\u0438\u0437 (\u0414\u041f\u0424)</li>
+      <li><strong>HRV</strong> \u2014 \u0432\u0430\u0440\u0438\u0430\u0431\u0435\u043b\u044c\u043d\u043e\u0441\u0442\u044c \u0440\u0438\u0442\u043c\u0430 \u0447\u0435\u0440\u0435\u0437 \u043c\u0435\u0442\u0440\u0438\u043a\u0443 RMSSD (<em>Task Force of ESC, 1996</em>)</li>
+      <li><strong>\u0414\u044b\u0445\u0430\u043d\u0438\u0435</strong> \u2014 \u0447\u0430\u0441\u0442\u043e\u0442\u0443 \u0434\u044b\u0445\u0430\u043d\u0438\u044f \u0438\u0437 \u0434\u044b\u0445\u0430\u0442\u0435\u043b\u044c\u043d\u043e\u0439 \u0441\u0438\u043d\u0443\u0441\u043e\u0432\u043e\u0439 \u0430\u0440\u0438\u0442\u043c\u0438\u0438 (RSA)</li>
+      <li><strong>\u041a\u043e\u0433\u0435\u0440\u0435\u043d\u0442\u043d\u043e\u0441\u0442\u044c</strong> \u2014 \u043f\u043e \u043c\u0435\u0442\u043e\u0434\u043e\u043b\u043e\u0433\u0438\u0438 <em>HeartMath Institute</em> (<em>McCraty et al., 2009</em>)</li>
+    </ul>
+    <p class="guide-ref">\u041b\u0438\u0442\u0435\u0440\u0430\u0442\u0443\u0440\u0430: De Haan & Jeanne, \u00abRobust Pulse Rate from Chrominance-Based rPPG\u00bb, IEEE Trans. Biomed. Eng., 2013</p>
+  `;
+  inner.appendChild(camSec);
+
+  // ── SECTION 2: Microphone ──
+  const micSec = el('div', 'guide-section');
+  micSec.innerHTML = `
+    <div class="guide-section-title">\ud83c\udfa4 \u041c\u0438\u043a\u0440\u043e\u0444\u043e\u043d: \u0433\u043e\u043b\u043e\u0441\u043e\u0432\u044b\u0435 \u0431\u0438\u043e\u043c\u0430\u0440\u043a\u0435\u0440\u044b</div>
+    <p class="guide-section-text">\u0413\u043e\u043b\u043e\u0441 \u043d\u0435\u0441\u0451\u0442 \u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u044e \u043e \u043f\u0441\u0438\u0445\u043e\u044d\u043c\u043e\u0446\u0438\u043e\u043d\u0430\u043b\u044c\u043d\u043e\u043c \u0441\u043e\u0441\u0442\u043e\u044f\u043d\u0438\u0438. \u0412\u043e \u0432\u0440\u0435\u043c\u044f \u0441\u043a\u0430\u043d\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u044f \u043c\u043e\u0436\u043d\u043e \u0433\u043e\u0432\u043e\u0440\u0438\u0442\u044c \u2014 \u0438\u043b\u0438 \u043c\u043e\u043b\u0447\u0430\u0442\u044c (\u0442\u043e\u0433\u0434\u0430 \u0433\u043e\u043b\u043e\u0441\u043e\u0432\u044b\u0435 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u044b \u0431\u0443\u0434\u0443\u0442 \u043d\u0435\u0439\u0442\u0440\u0430\u043b\u044c\u043d\u044b\u043c\u0438).</p>
+    <p class="guide-section-text">\u041c\u044b \u0430\u043d\u0430\u043b\u0438\u0437\u0438\u0440\u0443\u0435\u043c:</p>
+    <ul class="guide-list">
+      <li><strong>Pitch (F0)</strong> \u2014 \u043e\u0441\u043d\u043e\u0432\u043d\u043e\u0439 \u0442\u043e\u043d \u0433\u043e\u043b\u043e\u0441\u0430 \u0447\u0435\u0440\u0435\u0437 \u0430\u0432\u0442\u043e\u043a\u043e\u0440\u0440\u0435\u043b\u044f\u0446\u0438\u044e. \u0421\u0442\u0440\u0435\u0441\u0441 \u043f\u043e\u0432\u044b\u0448\u0430\u0435\u0442 \u0442\u043e\u043d, \u0440\u0430\u0441\u0441\u043b\u0430\u0431\u043b\u0435\u043d\u0438\u0435 \u2014 \u043f\u043e\u043d\u0438\u0436\u0430\u0435\u0442</li>
+      <li><strong>Jitter</strong> \u2014 \u043c\u0438\u043a\u0440\u043e\u043a\u043e\u043b\u0435\u0431\u0430\u043d\u0438\u044f \u0447\u0430\u0441\u0442\u043e\u0442\u044b \u0433\u043e\u043b\u043e\u0441\u0430 \u043e\u0442 \u0446\u0438\u043a\u043b\u0430 \u043a \u0446\u0438\u043a\u043b\u0443. \u0412\u044b\u0441\u043e\u043a\u0438\u0439 \u2014 \u0433\u043e\u043b\u043e\u0441 \u0434\u0440\u043e\u0436\u0438\u0442 (<em>Titze, 1994</em>)</li>
+      <li><strong>Shimmer</strong> \u2014 \u043a\u043e\u043b\u0435\u0431\u0430\u043d\u0438\u044f \u0433\u0440\u043e\u043c\u043a\u043e\u0441\u0442\u0438. \u041d\u0435\u0441\u0442\u0430\u0431\u0438\u043b\u044c\u043d\u043e\u0441\u0442\u044c \u0433\u043e\u0432\u043e\u0440\u0438\u0442 \u043e \u043d\u0430\u043f\u0440\u044f\u0436\u0435\u043d\u0438\u0438</li>
+      <li><strong>HNR</strong> \u2014 \u0441\u043e\u043e\u0442\u043d\u043e\u0448\u0435\u043d\u0438\u0435 \u0433\u0430\u0440\u043c\u043e\u043d\u0438\u043a \u043a \u0448\u0443\u043c\u0443 (<em>Boersma, 1993</em>). \u0427\u0438\u0441\u0442\u044b\u0439 \u0433\u043e\u043b\u043e\u0441 = \u0432\u044b\u0441\u043e\u043a\u0438\u0439 HNR</li>
+      <li><strong>\u0421\u043f\u0435\u043a\u0442\u0440\u0430\u043b\u044c\u043d\u044b\u0439 \u0446\u0435\u043d\u0442\u0440\u043e\u0438\u0434</strong> \u2014 \u00ab\u0446\u0435\u043d\u0442\u0440 \u0442\u044f\u0436\u0435\u0441\u0442\u0438\u00bb \u0447\u0430\u0441\u0442\u043e\u0442 \u0433\u043e\u043b\u043e\u0441\u0430. \u0427\u0435\u043c \u0432\u044b\u0448\u0435, \u0442\u0435\u043c \u044f\u0440\u0447\u0435 \u0437\u0432\u0443\u0447\u0430\u043d\u0438\u0435</li>
+    </ul>
+    <p class="guide-ref">\u041b\u0438\u0442\u0435\u0440\u0430\u0442\u0443\u0440\u0430: Titze, \u00abPrinciples of Voice Production\u00bb, 1994; Boersma, \u00abAccurate short-term analysis of the fundamental frequency and the harmonics-to-noise ratio\u00bb, IFA, 1993</p>
+  `;
+  inner.appendChild(micSec);
+
+  // Divider
+  inner.appendChild(el('div', 'guide-divider'));
+  inner.appendChild(el('div', 'guide-subtitle', { text: '7 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u043e\u0432 \u0431\u0438\u043e\u043f\u043e\u043b\u044f' }));
+
+  inner.appendChild(el('p', 'guide-section-text guide-mapping-intro', {
+    text: '\u0420\u0435\u0430\u043b\u044c\u043d\u044b\u0435 \u0444\u0438\u0437\u0438\u043e\u043b\u043e\u0433\u0438\u0447\u0435\u0441\u043a\u0438\u0435 \u0441\u0438\u0433\u043d\u0430\u043b\u044b \u043f\u0435\u0440\u0435\u0432\u043e\u0434\u044f\u0442\u0441\u044f \u0432 7 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u043e\u0432 \u0432\u0441\u0435\u043b\u0435\u043d\u043d\u043e\u0439 Awaterra. \u041d\u0438\u0436\u043d\u0438\u0435 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u044b \u043e\u043f\u0438\u0440\u0430\u044e\u0442\u0441\u044f \u043d\u0430 \u0434\u0430\u043d\u043d\u044b\u0435 \u043a\u0430\u043c\u0435\u0440\u044b (\u043f\u0443\u043b\u044c\u0441), \u0432\u0435\u0440\u0445\u043d\u0438\u0435 \u2014 \u043d\u0430 \u0434\u0430\u043d\u043d\u044b\u0435 \u043c\u0438\u043a\u0440\u043e\u0444\u043e\u043d\u0430 (\u0433\u043e\u043b\u043e\u0441).'
+  }));
+
+  // Parameters
+  const params = [
+    {
+      name: '\u0421\u0442\u0430\u0431\u0438\u043b\u044c\u043d\u043e\u0441\u0442\u044c', color: '#ff3366', freq: '396 Hz',
+      how: '\u0412\u0430\u0440\u0438\u0430\u0431\u0435\u043b\u044c\u043d\u043e\u0441\u0442\u044c \u0441\u0435\u0440\u0434\u0435\u0447\u043d\u043e\u0433\u043e \u0440\u0438\u0442\u043c\u0430 (HRV) \u2014 \u043d\u0430\u0441\u043a\u043e\u043b\u044c\u043a\u043e \u0440\u0430\u0432\u043d\u043e\u043c\u0435\u0440\u043d\u044b \u043f\u0430\u0443\u0437\u044b \u043c\u0435\u0436\u0434\u0443 \u0443\u0434\u0430\u0440\u0430\u043c\u0438 \u0441\u0435\u0440\u0434\u0446\u0430. \u041c\u0435\u0442\u0440\u0438\u043a\u0430 RMSSD \u2014 \u0441\u0442\u0430\u043d\u0434\u0430\u0440\u0442 Task Force of ESC/NASPE (1996) \u0434\u043b\u044f \u043e\u0446\u0435\u043d\u043a\u0438 \u043f\u0430\u0440\u0430\u0441\u0438\u043c\u043f\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u043e\u0439 \u0430\u043a\u0442\u0438\u0432\u043d\u043e\u0441\u0442\u0438.',
+      why: '\u0412\u044b\u0441\u043e\u043a\u0430\u044f \u0441\u0442\u0430\u0431\u0438\u043b\u044c\u043d\u043e\u0441\u0442\u044c \u0433\u043e\u0432\u043e\u0440\u0438\u0442 \u043e \u0442\u043e\u043c, \u0447\u0442\u043e \u043d\u0435\u0440\u0432\u043d\u0430\u044f \u0441\u0438\u0441\u0442\u0435\u043c\u0430 \u0432 \u0431\u0430\u043b\u0430\u043d\u0441\u0435 \u0438 \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u043c \u0445\u043e\u0440\u043e\u0448\u043e \u0430\u0434\u0430\u043f\u0442\u0438\u0440\u0443\u0435\u0442\u0441\u044f \u043a \u0441\u0442\u0440\u0435\u0441\u0441\u0443.',
+      source: '\u041a\u0430\u043c\u0435\u0440\u0430 \u2192 \u043f\u0443\u043b\u044c\u0441 \u2192 HRV (RMSSD)'
+    },
+    {
+      name: '\u041f\u043e\u0442\u043e\u043a', color: '#ff7a2e', freq: '417 Hz',
+      how: '\u041f\u043b\u0430\u0432\u043d\u043e\u0441\u0442\u044c \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f \u043f\u0443\u043b\u044c\u0441\u0430 \u2014 \u043d\u0435\u0442 \u043b\u0438 \u0440\u0435\u0437\u043a\u0438\u0445 \u0441\u043a\u0430\u0447\u043a\u043e\u0432. \u0420\u0430\u0441\u0441\u0447\u0438\u0442\u044b\u0432\u0430\u0435\u0442\u0441\u044f \u043a\u0430\u043a \u043e\u0431\u0440\u0430\u0442\u043d\u0430\u044f \u0432\u0435\u043b\u0438\u0447\u0438\u043d\u0430 \u0440\u0435\u0437\u043a\u0438\u0445 \u043e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u0439 \u0441\u0433\u043b\u0430\u0436\u0435\u043d\u043d\u043e\u0433\u043e \u043f\u0443\u043b\u044c\u0441\u0430 (EMA-\u0444\u0438\u043b\u044c\u0442\u0440\u0430\u0446\u0438\u044f).',
+      why: '\u041f\u043b\u0430\u0432\u043d\u044b\u0439 \u043f\u043e\u0442\u043e\u043a \u043e\u0437\u043d\u0430\u0447\u0430\u0435\u0442 \u0441\u043e\u0441\u0442\u043e\u044f\u043d\u0438\u0435 \u00ab\u0432 \u043f\u043e\u0442\u043e\u043a\u0435\u00bb \u2014 \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u043c \u0440\u0430\u0431\u043e\u0442\u0430\u0435\u0442 \u0441\u043b\u0430\u0436\u0435\u043d\u043d\u043e, \u0431\u0435\u0437 \u043f\u0435\u0440\u0435\u0433\u0440\u0443\u0437\u043e\u043a.',
+      source: '\u041a\u0430\u043c\u0435\u0440\u0430 \u2192 \u0441\u0433\u043b\u0430\u0436\u0435\u043d\u043d\u044b\u0439 \u043f\u0443\u043b\u044c\u0441'
+    },
+    {
+      name: '\u042d\u043d\u0435\u0440\u0433\u0438\u044f', color: '#ffcc00', freq: '528 Hz',
+      how: '\u041a\u043e\u043c\u0431\u0438\u043d\u0430\u0446\u0438\u044f \u0447\u0430\u0441\u0442\u043e\u0442\u044b \u043f\u0443\u043b\u044c\u0441\u0430 (\u043e\u043f\u0442\u0438\u043c\u0443\u043c 60\u201380 \u0443\u0434/\u043c\u0438\u043d) \u0438 \u0433\u0440\u043e\u043c\u043a\u043e\u0441\u0442\u0438 \u0433\u043e\u043b\u043e\u0441\u0430 (RMS-\u044d\u043d\u0435\u0440\u0433\u0438\u044f \u0430\u0443\u0434\u0438\u043e\u0441\u0438\u0433\u043d\u0430\u043b\u0430). \u041f\u0443\u043b\u044c\u0441 \u0432 \u0437\u043e\u043d\u0435 \u043f\u043e\u043a\u043e\u044f = \u043c\u0430\u043a\u0441\u0438\u043c\u0443\u043c \u044d\u043d\u0435\u0440\u0433\u0438\u0438.',
+      why: '\u041e\u0442\u0440\u0430\u0436\u0430\u0435\u0442 \u043e\u0431\u0449\u0438\u0439 \u0443\u0440\u043e\u0432\u0435\u043d\u044c \u0430\u043a\u0442\u0438\u0432\u0430\u0446\u0438\u0438 \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u043c\u0430. \u0421\u043b\u0438\u0448\u043a\u043e\u043c \u0432\u044b\u0441\u043e\u043a\u0438\u0439 \u043f\u0443\u043b\u044c\u0441 \u0441\u043d\u0438\u0436\u0430\u0435\u0442 \u043f\u043e\u043a\u0430\u0437\u0430\u0442\u0435\u043b\u044c.',
+      source: '\u041a\u0430\u043c\u0435\u0440\u0430 \u2192 HR + \u041c\u0438\u043a\u0440\u043e\u0444\u043e\u043d \u2192 RMS'
+    },
+    {
+      name: '\u0420\u0435\u0437\u043e\u043d\u0430\u043d\u0441', color: '#00ff99', freq: '639 Hz',
+      how: '\u041a\u043e\u0433\u0435\u0440\u0435\u043d\u0442\u043d\u043e\u0441\u0442\u044c \u0441\u0435\u0440\u0434\u0435\u0447\u043d\u043e\u0433\u043e \u0440\u0438\u0442\u043c\u0430 \u043f\u043e \u043c\u0435\u0442\u043e\u0434\u043e\u043b\u043e\u0433\u0438\u0438 HeartMath Institute (McCraty, Atkinson, Tomasino, Bradley, 2009). \u0410\u043d\u0430\u043b\u0438\u0437\u0438\u0440\u0443\u0435\u0442\u0441\u044f \u0441\u043f\u0435\u043a\u0442\u0440 HRV: \u0435\u0441\u043b\u0438 \u043e\u0441\u043d\u043e\u0432\u043d\u0430\u044f \u043c\u043e\u0449\u043d\u043e\u0441\u0442\u044c \u0441\u043a\u043e\u043d\u0446\u0435\u043d\u0442\u0440\u0438\u0440\u043e\u0432\u0430\u043d\u0430 \u0432\u043e\u043a\u0440\u0443\u0433 0.1 \u0413\u0446 \u2014 \u044d\u0442\u043e \u0441\u043e\u0441\u0442\u043e\u044f\u043d\u0438\u0435 \u043a\u043e\u0433\u0435\u0440\u0435\u043d\u0442\u043d\u043e\u0441\u0442\u0438.',
+      why: '\u0413\u0430\u0440\u043c\u043e\u043d\u0438\u044f \u043c\u0435\u0436\u0434\u0443 \u0441\u0435\u0440\u0434\u0446\u0435\u043c, \u0434\u044b\u0445\u0430\u043d\u0438\u0435\u043c \u0438 \u043d\u0435\u0440\u0432\u043d\u043e\u0439 \u0441\u0438\u0441\u0442\u0435\u043c\u043e\u0439. \u0412\u044b\u0441\u043e\u043a\u0438\u0439 \u0440\u0435\u0437\u043e\u043d\u0430\u043d\u0441 \u0441\u0432\u044f\u0437\u0430\u043d \u0441 \u044d\u043c\u043e\u0446\u0438\u043e\u043d\u0430\u043b\u044c\u043d\u044b\u043c \u0431\u0430\u043b\u0430\u043d\u0441\u043e\u043c.',
+      source: '\u041a\u0430\u043c\u0435\u0440\u0430 \u2192 \u043f\u0443\u043b\u044c\u0441 \u2192 \u0441\u043f\u0435\u043a\u0442\u0440 HRV \u2192 \u043f\u0438\u043a ~0.1 \u0413\u0446'
+    },
+    {
+      name: '\u0412\u0438\u0431\u0440\u0430\u0446\u0438\u044f', color: '#00ccff', freq: '741 Hz',
+      how: '\u041e\u0441\u043d\u043e\u0432\u043d\u043e\u0439 \u0442\u043e\u043d \u0433\u043e\u043b\u043e\u0441\u0430 (F0) \u0447\u0435\u0440\u0435\u0437 \u0430\u0432\u0442\u043e\u043a\u043e\u0440\u0440\u0435\u043b\u044f\u0446\u0438\u043e\u043d\u043d\u044b\u0439 \u043c\u0435\u0442\u043e\u0434 \u0438 \u0441\u043f\u0435\u043a\u0442\u0440\u0430\u043b\u044c\u043d\u044b\u0439 \u0446\u0435\u043d\u0442\u0440\u043e\u0438\u0434 \u2014 \u0441\u0440\u0435\u0434\u043d\u0435\u0432\u0437\u0432\u0435\u0448\u0435\u043d\u043d\u0430\u044f \u0447\u0430\u0441\u0442\u043e\u0442\u0430 \u0441\u043f\u0435\u043a\u0442\u0440\u0430. \u041c\u0435\u0442\u043e\u0434\u044b \u043e\u043f\u0438\u0441\u0430\u043d\u044b \u0432 \u0440\u0430\u0431\u043e\u0442\u0430\u0445 Rabiner & Schafer (1978).',
+      why: '\u0417\u0432\u0443\u043a\u043e\u0432\u0430\u044f \u0432\u044b\u0440\u0430\u0437\u0438\u0442\u0435\u043b\u044c\u043d\u043e\u0441\u0442\u044c \u0438 \u044d\u043d\u0435\u0440\u0433\u0435\u0442\u0438\u043a\u0430 \u0440\u0435\u0447\u0438. \u0411\u043e\u0433\u0430\u0442\u044b\u0439 \u043e\u0431\u0435\u0440\u0442\u043e\u043d\u0430\u043c\u0438 \u0433\u043e\u043b\u043e\u0441 = \u0432\u044b\u0441\u043e\u043a\u0430\u044f \u0432\u0438\u0431\u0440\u0430\u0446\u0438\u044f.',
+      source: '\u041c\u0438\u043a\u0440\u043e\u0444\u043e\u043d \u2192 pitch + \u0441\u043f\u0435\u043a\u0442\u0440\u0430\u043b\u044c\u043d\u044b\u0439 \u0446\u0435\u043d\u0442\u0440\u043e\u0438\u0434'
+    },
+    {
+      name: '\u042f\u0441\u043d\u043e\u0441\u0442\u044c', color: '#6677ff', freq: '852 Hz',
+      how: 'HNR (harmonics-to-noise ratio) \u043f\u043e \u043c\u0435\u0442\u043e\u0434\u0443 Boersma (1993) \u2014 \u0441\u043a\u043e\u043b\u044c\u043a\u043e \u0432 \u0433\u043e\u043b\u043e\u0441\u0435 \u0447\u0438\u0441\u0442\u043e\u0433\u043e \u0437\u0432\u0443\u043a\u0430 \u0432\u0441. \u0448\u0443\u043c\u0430. \u041f\u043b\u044e\u0441 jitter (Titze, 1994) \u2014 \u043c\u0438\u043a\u0440\u043e\u0434\u0440\u043e\u0436\u0430\u043d\u0438\u0435 \u0442\u043e\u043d\u0430, \u043d\u0438\u0437\u043a\u0438\u0439 jitter = \u0441\u0442\u0430\u0431\u0438\u043b\u044c\u043d\u044b\u0439 \u0433\u043e\u043b\u043e\u0441.',
+      why: '\u0427\u0438\u0441\u0442\u044b\u0439 \u0438 \u0441\u0442\u0430\u0431\u0438\u043b\u044c\u043d\u044b\u0439 \u0433\u043e\u043b\u043e\u0441 \u043e\u0442\u0440\u0430\u0436\u0430\u0435\u0442 \u044f\u0441\u043d\u043e\u0441\u0442\u044c \u0441\u043e\u0437\u043d\u0430\u043d\u0438\u044f \u0438 \u0441\u043e\u0441\u0440\u0435\u0434\u043e\u0442\u043e\u0447\u0435\u043d\u043d\u043e\u0441\u0442\u044c.',
+      source: '\u041c\u0438\u043a\u0440\u043e\u0444\u043e\u043d \u2192 HNR + jitter'
+    },
+    {
+      name: '\u0426\u0435\u043b\u043e\u0441\u0442\u043d\u043e\u0441\u0442\u044c', color: '#bb44ff', freq: '963 Hz',
+      how: '\u0421\u043e\u0433\u043b\u0430\u0441\u043e\u0432\u0430\u043d\u043d\u043e\u0441\u0442\u044c \u0432\u0441\u0435\u0445 6 \u043e\u0441\u0442\u0430\u043b\u044c\u043d\u044b\u0445 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u043e\u0432 \u043c\u0435\u0436\u0434\u0443 \u0441\u043e\u0431\u043e\u0439. \u0412\u044b\u0447\u0438\u0441\u043b\u044f\u0435\u0442\u0441\u044f \u043a\u0430\u043a \u043e\u0431\u0440\u0430\u0442\u043d\u0430\u044f \u0432\u0435\u043b\u0438\u0447\u0438\u043d\u0430 \u0441\u0442\u0430\u043d\u0434\u0430\u0440\u0442\u043d\u043e\u0433\u043e \u043e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u044f (CV) \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u043e\u0432 1\u20136.',
+      why: '\u0427\u0435\u043c \u0431\u043b\u0438\u0436\u0435 \u0432\u0441\u0435 \u043f\u043e\u043a\u0430\u0437\u0430\u0442\u0435\u043b\u0438 \u0434\u0440\u0443\u0433 \u043a \u0434\u0440\u0443\u0433\u0443, \u0442\u0435\u043c \u0446\u0435\u043b\u043e\u0441\u0442\u043d\u0435\u0435 \u0441\u043e\u0441\u0442\u043e\u044f\u043d\u0438\u0435: \u0432\u0441\u0435 \u0441\u0438\u0441\u0442\u0435\u043c\u044b \u0440\u0430\u0431\u043e\u0442\u0430\u044e\u0442 \u043a\u0430\u043a \u0435\u0434\u0438\u043d\u043e\u0435 \u0446\u0435\u043b\u043e\u0435.',
+      source: '\u0420\u0430\u0441\u0447\u0451\u0442 \u2192 \u0434\u0438\u0441\u043f\u0435\u0440\u0441\u0438\u044f \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u043e\u0432 1\u20136'
+    }
+  ];
+
+  for (const p of params) {
+    const card = el('div', 'guide-param');
+    card.style.borderLeftColor = p.color;
+    card.innerHTML = `
+      <div class="guide-param-head">
+        <span class="guide-param-dot" style="background:${p.color};box-shadow:0 0 8px ${p.color}"></span>
+        <span class="guide-param-name">${p.name}</span>
+        <span class="guide-param-freq">${p.freq}</span>
+      </div>
+      <div class="guide-param-row">
+        <span class="guide-param-label">\u041a\u0430\u043a \u0441\u0447\u0438\u0442\u0430\u0435\u0442\u0441\u044f:</span>
+        <span>${p.how}</span>
+      </div>
+      <div class="guide-param-row">
+        <span class="guide-param-label">\u041d\u0430 \u0447\u0442\u043e \u0432\u043b\u0438\u044f\u0435\u0442:</span>
+        <span>${p.why}</span>
+      </div>
+      <div class="guide-param-source">${p.source}</div>
+    `;
+    inner.appendChild(card);
+  }
+
+  // Disclaimer
+  inner.appendChild(el('p', 'guide-disclaimer', {
+    text: 'AWABAND Scanner \u2014 \u0438\u0433\u0440\u043e\u0432\u043e\u0439 \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442 \u0432\u0441\u0435\u043b\u0435\u043d\u043d\u043e\u0439 Awaterra 2225. \u041c\u0435\u0442\u043e\u0434\u044b \u0438\u0437\u043c\u0435\u0440\u0435\u043d\u0438\u044f \u043e\u0441\u043d\u043e\u0432\u0430\u043d\u044b \u043d\u0430 \u043d\u0430\u0443\u0447\u043d\u044b\u0445 \u0440\u0430\u0431\u043e\u0442\u0430\u0445 (rPPG, voice biomarkers, HRV analysis), \u043d\u043e \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b \u043d\u043e\u0441\u044f\u0442 \u0440\u0430\u0437\u0432\u043b\u0435\u043a\u0430\u0442\u0435\u043b\u044c\u043d\u044b\u0439 \u0445\u0430\u0440\u0430\u043a\u0442\u0435\u0440 \u0438 \u043d\u0435 \u044f\u0432\u043b\u044f\u044e\u0442\u0441\u044f \u043c\u0435\u0434\u0438\u0446\u0438\u043d\u0441\u043a\u0438\u043c \u0434\u0438\u0430\u0433\u043d\u043e\u0437\u043e\u043c.'
+  }));
+
+  panel.appendChild(inner);
+  overlay.appendChild(panel);
+  return overlay;
+}
+
+/** Format elapsed time as M:SS */
+function formatElapsed(ms) {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const ss = s % 60;
+  return `T+${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+}
+
 /** Start the scanning session */
 async function startScanning() {
   showScreen('scanning');
+  scanStartTime = Date.now();
 
   const video = document.getElementById('scan-video');
   const auraCanvas = document.getElementById('scan-aura-canvas');
   const offscreen = document.getElementById('scan-offscreen');
   const statusEl = document.getElementById('scan-status');
   const panelDiv = document.getElementById('scan-panel');
+  const hudDataTL = document.getElementById('hud-data-tl');
+  const hudDataTR = document.getElementById('hud-data-tr');
+  const pulseBar = document.getElementById('pulse-bar');
 
   // Initialize rPPG processor
   rppg = new RPPGProcessor();
@@ -180,7 +405,7 @@ async function startScanning() {
   try {
     stream = await startCamera(video);
   } catch (err) {
-    statusEl.textContent = 'Камера недоступна';
+    statusEl.textContent = '\u041a\u0430\u043c\u0435\u0440\u0430 \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u0430';
     return;
   }
 
@@ -189,7 +414,6 @@ async function startScanning() {
   try {
     await voiceAnalyzer.start();
   } catch (err) {
-    // Voice is optional — continue without it
     voiceAnalyzer = null;
   }
 
@@ -199,16 +423,15 @@ async function startScanning() {
   // Set up AWABAND panel
   awabandPanel = new AwabandPanel(panelDiv);
 
-  // Resize canvases once video dimensions are known
+  // Resize canvases to viewport size (not full window)
+  const viewport = document.querySelector('.scan-viewport');
   const onResize = () => {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    auraRenderer.resize(w, h);
+    const rect = viewport.getBoundingClientRect();
+    auraRenderer.resize(rect.width, rect.height);
     offscreen.width = video.videoWidth || 640;
     offscreen.height = video.videoHeight || 480;
   };
   onResize();
-  // Also resize when video metadata loads (actual resolution)
   video.addEventListener('loadedmetadata', onResize, { once: true });
 
   const offCtx = offscreen.getContext('2d');
@@ -235,6 +458,11 @@ async function startScanning() {
     // Detect face position every ~10 frames for aura tracking
     if (frameCount % 10 === 0 && video.readyState >= 2) {
       auraRenderer.detectFaceFromCanvas(offCtx, offscreen.width, offscreen.height);
+    }
+
+    // Update elapsed time HUD every 30 frames
+    if (frameCount % 30 === 0 && hudDataTR) {
+      hudDataTR.textContent = formatElapsed(Date.now() - scanStartTime);
     }
 
     // Every ~15 frames (~500ms at 30fps): calculate vitals and update visuals
@@ -277,11 +505,26 @@ async function startScanning() {
 
       // Update status
       if (fullness < 0.25) {
-        statusEl.textContent = 'Калибровка...';
+        statusEl.textContent = '\u041a\u0430\u043b\u0438\u0431\u0440\u043e\u0432\u043a\u0430...';
       } else if (hr !== null) {
         statusEl.textContent = `HR: ${hr} bpm`;
       } else {
-        statusEl.textContent = `Захват сигнала... ${Math.round(fullness * 100)}%`;
+        statusEl.textContent = `\u0417\u0430\u0445\u0432\u0430\u0442 \u0441\u0438\u0433\u043d\u0430\u043b\u0430... ${Math.round(fullness * 100)}%`;
+      }
+
+      // Update HUD data readouts
+      if (hudDataTL) {
+        const sig = Math.round(fullness * 100);
+        hudDataTL.textContent = `SIG: ${sig}%${hr ? ` \u00b7 ${hr} BPM` : ''}`;
+      }
+
+      // Update pulse indicator
+      if (pulseBar && hr) {
+        const beatDuration = 60 / hr;
+        pulseBar.style.setProperty('--beat-duration', `${beatDuration}s`);
+        if (!pulseBar.classList.contains('beating')) {
+          pulseBar.classList.add('beating');
+        }
       }
 
       // Update panel
@@ -297,27 +540,23 @@ async function startScanning() {
   animFrameId = requestAnimationFrame(loop);
 }
 
-/** Stop scanning and show results */
-function stopScanning() {
-  // Cancel animation loop
+/** Stop scanning and show results (or go back to splash) */
+function stopScanning(goBack = false) {
   if (animFrameId !== null) {
     cancelAnimationFrame(animFrameId);
     animFrameId = null;
   }
 
-  // Stop camera
   if (stream) {
     stopCamera(stream);
     stream = null;
   }
 
-  // Stop voice
   if (voiceAnalyzer) {
     voiceAnalyzer.stop();
     voiceAnalyzer = null;
   }
 
-  // Render final aura snapshot to result canvas
   const resultCanvas = document.getElementById('result-canvas');
   const resultPanel = document.getElementById('result-panel');
 
@@ -327,18 +566,20 @@ function stopScanning() {
     resultCanvas.width = w;
     resultCanvas.height = h;
 
-    // Draw dark background
     const ctx = resultCanvas.getContext('2d');
-    ctx.fillStyle = '#080b14';
+    ctx.fillStyle = '#060910';
     ctx.fillRect(0, 0, w, h);
 
-    // Render aura onto result canvas
     const snapshotAura = new AuraRenderer(resultCanvas);
     snapshotAura.resize(w, h);
     snapshotAura.render(lastBiofield, null);
   }
 
-  // Build result panel with final values
+  if (goBack) {
+    showScreen('splash');
+    return;
+  }
+
   if (lastBiofield && resultPanel) {
     const panel = new AwabandPanel(resultPanel);
     panel.update(lastBiofield);
@@ -362,6 +603,11 @@ function saveSnapshot() {
 function init() {
   const app = document.getElementById('app');
   if (!app) return;
+
+  // Background layers (shared)
+  app.appendChild(el('div', 'bg-mesh'));
+  app.appendChild(el('div', 'bg-noise'));
+  app.appendChild(el('div', 'bg-grid'));
 
   app.appendChild(buildSplash());
   app.appendChild(buildScanning());
