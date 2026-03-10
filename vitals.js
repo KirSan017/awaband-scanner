@@ -32,14 +32,25 @@ export function calculateHRV(pulseSignal, fps) {
 
   if (ibis.length < 2) return null;
 
-  // RMSSD — standard HRV metric (root mean square of successive differences)
+  // RMSSD — root mean square of successive differences
   let sumSquaredDiffs = 0;
   for (let i = 1; i < ibis.length; i++) {
     sumSquaredDiffs += (ibis[i] - ibis[i-1]) ** 2;
   }
   const rmssd = Math.sqrt(sumSquaredDiffs / (ibis.length - 1));
 
-  return { rmssd, ibis };
+  // SDNN — standard deviation of NN intervals
+  const meanIBI = ibis.reduce((a, b) => a + b) / ibis.length;
+  const sdnn = Math.sqrt(ibis.reduce((s, v) => s + (v - meanIBI) ** 2, 0) / ibis.length);
+
+  // pNN50 — percentage of successive differences > 50ms
+  let nn50count = 0;
+  for (let i = 1; i < ibis.length; i++) {
+    if (Math.abs(ibis[i] - ibis[i-1]) > 50) nn50count++;
+  }
+  const pnn50 = (nn50count / (ibis.length - 1)) * 100;
+
+  return { rmssd, sdnn, pnn50, ibis };
 }
 
 /**
@@ -68,6 +79,81 @@ export function calculateBreathingRate(ibis) {
   // Sanity: 8-25 breaths/min
   if (breathsPerMin < 8 || breathsPerMin > 25) return null;
   return Math.round(breathsPerMin);
+}
+
+/**
+ * LF/HF ratio — sympathovagal balance indicator.
+ * LF (0.04-0.15 Hz): sympathetic + parasympathetic
+ * HF (0.15-0.40 Hz): parasympathetic (vagal)
+ * @param {number[]} ibis - inter-beat intervals in ms
+ * @returns {number | null} LF/HF ratio (typically 0.5-6.0)
+ */
+export function calculateLFHF(ibis) {
+  if (ibis.length < 10) return null;
+
+  const N = ibis.length;
+  const mean = ibis.reduce((a, b) => a + b) / N;
+  const centered = ibis.map(v => v - mean);
+  const sampleRate = 1000 / mean;
+
+  let lfPower = 0, hfPower = 0;
+
+  for (let k = 1; k < N / 2; k++) {
+    let real = 0, imag = 0;
+    for (let n = 0; n < N; n++) {
+      const angle = (2 * Math.PI * k * n) / N;
+      real += centered[n] * Math.cos(angle);
+      imag -= centered[n] * Math.sin(angle);
+    }
+    const power = real * real + imag * imag;
+    const freq = k * sampleRate / N;
+
+    if (freq >= 0.04 && freq < 0.15) lfPower += power;
+    else if (freq >= 0.15 && freq <= 0.40) hfPower += power;
+  }
+
+  if (hfPower === 0) return null;
+  return Math.round((lfPower / hfPower) * 100) / 100;
+}
+
+/**
+ * Baevsky Stress Index (SI) — autonomic nervous system tension indicator.
+ * SI = AMo / (2 * Mo * MxDMn)
+ * where AMo = amplitude of mode (%), Mo = mode (most frequent IBI), MxDMn = range
+ * Normal: 50-150, Stress: >150, High stress: >500
+ * @param {number[]} ibis - inter-beat intervals in ms
+ * @returns {number | null} stress index
+ */
+export function calculateBaevskySI(ibis) {
+  if (ibis.length < 8) return null;
+
+  // Build histogram with 50ms bins
+  const binSize = 50;
+  const bins = {};
+  for (const ibi of ibis) {
+    const bin = Math.round(ibi / binSize) * binSize;
+    bins[bin] = (bins[bin] || 0) + 1;
+  }
+
+  // Mode (Mo) — most frequent bin center
+  let mo = 0, maxCount = 0;
+  for (const [bin, count] of Object.entries(bins)) {
+    if (count > maxCount) {
+      maxCount = count;
+      mo = Number(bin);
+    }
+  }
+
+  // AMo — amplitude of mode as percentage
+  const amo = (maxCount / ibis.length) * 100;
+
+  // MxDMn — variation range (max - min IBI)
+  const mxdmn = Math.max(...ibis) - Math.min(...ibis);
+
+  if (mo === 0 || mxdmn === 0) return null;
+
+  const si = amo / (2 * (mo / 1000) * (mxdmn / 1000));
+  return Math.round(si);
 }
 
 /**

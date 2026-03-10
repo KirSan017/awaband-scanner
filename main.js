@@ -3,7 +3,8 @@
 
 import { startCamera, stopCamera, getForeheadROI, extractROIPixels } from './camera.js';
 import { RPPGProcessor } from './rppg.js';
-import { calculateHRV, calculateBreathingRate, calculateCoherence } from './vitals.js';
+import { calculateHRV, calculateBreathingRate, calculateCoherence, calculateLFHF, calculateBaevskySI } from './vitals.js';
+import { VibraimageProcessor } from './vibraimage.js';
 import { VoiceAnalyzer } from './voice.js';
 import { mapToBiofield } from './biofield.js';
 import { AuraRenderer } from './aura.js';
@@ -16,6 +17,7 @@ let stream = null;
 let voiceAnalyzer = null;
 let animFrameId = null;
 let rppg = null;
+let vibraimageProc = null;
 let auraRenderer = null;
 let awabandPanel = null;
 let lastBiofield = null;
@@ -394,8 +396,9 @@ async function startScanning() {
   const hudDataTR = document.getElementById('hud-data-tr');
   const pulseBar = document.getElementById('pulse-bar');
 
-  // Initialize rPPG processor
+  // Initialize processors
   rppg = new RPPGProcessor();
+  vibraimageProc = new VibraimageProcessor();
   frameCount = 0;
   lastBiofield = null;
   smoothedBiofield = null;
@@ -451,6 +454,15 @@ async function startScanning() {
       const roi = getForeheadROI(offscreen.width, offscreen.height);
       const { r, g, b } = extractROIPixels(offCtx, roi);
       rppg.addFrame(r, g, b);
+
+      // Feed vibraimage processor (face region — wider than forehead ROI)
+      const faceROI = {
+        x: Math.round(offscreen.width * 0.2),
+        y: Math.round(offscreen.height * 0.1),
+        w: Math.round(offscreen.width * 0.6),
+        h: Math.round(offscreen.height * 0.7)
+      };
+      vibraimageProc.processFrame(offCtx, faceROI);
     }
 
     frameCount++;
@@ -472,6 +484,10 @@ async function startScanning() {
       const fullness = rppg.bufferFullness;
 
       let hrv = null;
+      let sdnn = null;
+      let pnn50 = null;
+      let lfhf = null;
+      let stressIndex = null;
       let breathingRate = null;
       let coherence = null;
 
@@ -479,8 +495,12 @@ async function startScanning() {
         const hrvResult = calculateHRV(pulseSignal, 30);
         if (hrvResult) {
           hrv = hrvResult.rmssd;
+          sdnn = hrvResult.sdnn;
+          pnn50 = hrvResult.pnn50;
           breathingRate = calculateBreathingRate(hrvResult.ibis);
           coherence = calculateCoherence(hrvResult.ibis);
+          lfhf = calculateLFHF(hrvResult.ibis);
+          stressIndex = calculateBaevskySI(hrvResult.ibis);
         }
       }
 
@@ -494,11 +514,19 @@ async function startScanning() {
       // Voice metrics
       const voiceMetrics = voiceAnalyzer
         ? voiceAnalyzer.getMetrics()
-        : { pitch: null, jitter: null, shimmer: null, hnr: null, rms: null, spectralCentroid: null };
+        : { pitch: null, jitter: null, shimmer: null, hnr: null, rms: null, spectralCentroid: null, formants: null, voiceBioCenter: null };
+
+      // Update VoiceBio active center in aura renderer
+      if (auraRenderer && voiceMetrics.voiceBioCenter !== null) {
+        auraRenderer.setVoiceBioCenter(voiceMetrics.voiceBioCenter);
+      }
+
+      // Vibraimage metrics
+      const vibraimageMetrics = vibraimageProc.getMetrics();
 
       // Map to biofield
-      const vitals = { hr, hrv, breathingRate, coherence, hrSmoothed };
-      const rawBiofield = mapToBiofield(vitals, voiceMetrics);
+      const vitals = { hr, hrv, sdnn, pnn50, lfhf, stressIndex, breathingRate, coherence, hrSmoothed };
+      const rawBiofield = mapToBiofield(vitals, voiceMetrics, vibraimageMetrics);
       smoothedBiofield = smoothBiofield(rawBiofield, smoothedBiofield);
       lastBiofield = smoothedBiofield;
       lastHR = hr;
