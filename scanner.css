@@ -1,0 +1,577 @@
+/* ============================================================
+   AWABAND Scanner — Biofield Analysis Interface
+   Aesthetic: deep-sea bioluminescence, sci-fi medical device
+   ============================================================ */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  /* Deep ocean base */
+  --bg: #080b14;
+  --bg-glass: rgba(10, 14, 28, 0.72);
+  --bg-glass-hover: rgba(16, 22, 42, 0.85);
+  --bg-surface: rgba(14, 19, 36, 0.9);
+  --bg-elevated: rgba(20, 26, 48, 0.95);
+
+  /* Borders */
+  --border: rgba(60, 80, 140, 0.18);
+  --border-glow: rgba(100, 160, 255, 0.25);
+
+  /* Text */
+  --text: #a4b4d4;
+  --text-dim: #4a5578;
+  --text-bright: #dce4f8;
+  --text-muted: #2e3854;
+
+  /* Bioluminescent accents — Awaterra 7 parameters */
+  --red: #ff6b8a;
+  --orange: #ff9f5a;
+  --yellow: #ffd06b;
+  --green: #5ae8b0;
+  --cyan: #4ac8e8;
+  --indigo: #7b8aff;
+  --violet: #b47aff;
+
+  /* Primary accent */
+  --accent: #6b9fff;
+  --accent-glow: rgba(107, 159, 255, 0.35);
+  --accent-dim: rgba(107, 159, 255, 0.12);
+
+  /* Fonts */
+  --font-display: "Outfit", sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", monospace;
+
+  /* Spacing */
+  --radius: 8px;
+  --radius-lg: 12px;
+}
+
+/* ==================== BASE ==================== */
+
+body {
+  font-family: var(--font-display);
+  background: var(--bg);
+  color: var(--text);
+  height: 100dvh;
+  width: 100vw;
+  overflow: hidden;
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* ==================== BACKGROUND ==================== */
+
+.bg-mesh {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 10% 90%, rgba(90, 232, 176, 0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 85% 20%, rgba(107, 159, 255, 0.07) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 40% at 50% 50%, rgba(180, 122, 255, 0.04) 0%, transparent 50%),
+    radial-gradient(ellipse 70% 50% at 20% 10%, rgba(255, 107, 138, 0.03) 0%, transparent 50%);
+  animation: meshShift 25s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+@keyframes meshShift {
+  0% { opacity: 1; filter: hue-rotate(0deg); }
+  50% { opacity: 0.8; filter: hue-rotate(15deg); }
+  100% { opacity: 1; filter: hue-rotate(-10deg); }
+}
+
+.bg-noise {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 128px;
+  pointer-events: none;
+}
+
+/* ==================== APP CONTAINER ==================== */
+
+#app {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ==================== SCREENS ==================== */
+
+.screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.4s ease, visibility 0.4s ease;
+  pointer-events: none;
+}
+
+.screen.active {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+/* ==================== SPLASH SCREEN ==================== */
+
+#splash {
+  gap: 0;
+  text-align: center;
+}
+
+.splash-orb {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%,
+    rgba(107, 159, 255, 0.25) 0%,
+    rgba(180, 122, 255, 0.12) 35%,
+    rgba(90, 232, 176, 0.06) 65%,
+    transparent 100%);
+  border: 1px solid rgba(107, 159, 255, 0.15);
+  margin-bottom: 32px;
+  animation: orbFloat 6s ease-in-out infinite;
+  position: relative;
+}
+
+.splash-orb::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  border: 1px solid rgba(107, 159, 255, 0.06);
+  animation: orbRingPulse 4s ease-in-out infinite;
+}
+
+@keyframes orbFloat {
+  0%, 100% { transform: translateY(0); box-shadow: 0 0 40px rgba(107, 159, 255, 0.1), 0 0 80px rgba(107, 159, 255, 0.05); }
+  50% { transform: translateY(-10px); box-shadow: 0 0 60px rgba(107, 159, 255, 0.18), 0 0 120px rgba(107, 159, 255, 0.08); }
+}
+
+@keyframes orbRingPulse {
+  0%, 100% { transform: scale(1); opacity: 0.5; }
+  50% { transform: scale(1.12); opacity: 1; }
+}
+
+.splash-brand {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-bright);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.splash-brand span {
+  font-weight: 300;
+  color: var(--accent);
+}
+
+.splash-version {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-dim);
+  letter-spacing: 0.08em;
+  margin-bottom: 48px;
+}
+
+.splash-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px 36px;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-bright);
+  background: rgba(107, 159, 255, 0.12);
+  border: 1px solid rgba(107, 159, 255, 0.3);
+  border-radius: 60px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  letter-spacing: 0.02em;
+}
+
+.splash-btn::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 60px;
+  background: linear-gradient(135deg,
+    rgba(107, 159, 255, 0.2) 0%,
+    rgba(180, 122, 255, 0.1) 50%,
+    rgba(90, 232, 176, 0.15) 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: -1;
+}
+
+.splash-btn:hover {
+  border-color: rgba(107, 159, 255, 0.5);
+  box-shadow:
+    0 0 20px rgba(107, 159, 255, 0.15),
+    0 0 60px rgba(107, 159, 255, 0.08);
+  transform: translateY(-1px);
+}
+
+.splash-btn:hover::before {
+  opacity: 1;
+}
+
+.splash-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 0 10px rgba(107, 159, 255, 0.1);
+}
+
+.splash-btn-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent);
+  position: relative;
+  flex-shrink: 0;
+  animation: btnIconPulse 3s ease-in-out infinite;
+}
+
+.splash-btn-icon::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+@keyframes btnIconPulse {
+  0%, 100% { box-shadow: 0 0 4px rgba(107, 159, 255, 0.2); }
+  50% { box-shadow: 0 0 12px rgba(107, 159, 255, 0.5); }
+}
+
+.splash-footer {
+  position: absolute;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* ==================== SCANNING SCREEN ==================== */
+
+#scanning {
+  padding: 0;
+  align-items: stretch;
+  justify-content: stretch;
+}
+
+#scanning.active {
+  display: block;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.scan-video {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+.scan-aura-canvas {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.scan-status {
+  position: absolute;
+  top: calc(12px + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: #5ae8b0;
+  background: rgba(8, 11, 20, 0.6);
+  padding: 6px 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(60, 80, 140, 0.18);
+  z-index: 15;
+}
+
+.scan-stop-btn {
+  position: absolute;
+  top: calc(12px + env(safe-area-inset-top));
+  right: 16px;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  border: 2px solid #ff6b8a;
+  background: rgba(255, 107, 138, 0.15);
+  color: #ff6b8a;
+  font-size: 18px;
+  cursor: pointer;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scan-stop-btn:active {
+  background: rgba(255, 107, 138, 0.3);
+}
+
+/* ==================== RESULT SCREEN ==================== */
+
+#result {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg, #080b14);
+}
+
+.result-canvas-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.result-canvas {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.result-actions {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  justify-content: center;
+}
+
+.result-btn {
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid rgba(60, 80, 140, 0.3);
+  background: rgba(14, 19, 36, 0.9);
+  color: #a4b4d4;
+  transition: all 0.2s;
+}
+
+.result-btn:active {
+  background: rgba(20, 26, 48, 0.95);
+}
+
+.result-btn-primary {
+  background: rgba(90, 232, 176, 0.15);
+  border-color: rgba(90, 232, 176, 0.3);
+  color: #5ae8b0;
+}
+
+/* ==================== ANIMATIONS ==================== */
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ==================== SCROLLBAR ==================== */
+
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(60, 80, 140, 0.25);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(60, 80, 140, 0.45);
+}
+
+/* ==================== SELECTION ==================== */
+
+::selection {
+  background: rgba(107, 159, 255, 0.25);
+  color: var(--text-bright);
+}
+
+/* ==================== AWABAND Panel ==================== */
+
+.awaband-panel {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  background: rgba(8, 11, 20, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(60, 80, 140, 0.18);
+  z-index: 20;
+}
+
+.luminosity {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: center;
+  margin-bottom: 8px;
+  letter-spacing: 0.5px;
+  transition: color 0.5s ease;
+}
+
+.param-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.param-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 2px 0;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.param-row:active {
+  background: rgba(107, 159, 255, 0.08);
+}
+
+.param-name {
+  font-size: 11px;
+  color: #4a5578;
+  width: 100px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.param-bar-track {
+  flex: 1;
+  height: 6px;
+  background: rgba(60, 80, 140, 0.12);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.param-bar-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.param-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #a4b4d4;
+  width: 28px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* ==================== Parameter Tooltip ==================== */
+
+.param-tooltip {
+  position: absolute;
+  bottom: 100%;
+  left: 12px;
+  right: 12px;
+  margin-bottom: 8px;
+  padding: 14px 16px;
+  background: rgba(10, 14, 28, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(60, 80, 140, 0.25);
+  border-radius: 10px;
+  z-index: 30;
+  animation: fadeSlideUp 0.2s ease;
+}
+
+.tooltip-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.tooltip-color {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tooltip-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-bright);
+}
+
+.tooltip-freq {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-left: auto;
+}
+
+.tooltip-meta {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.tooltip-desc {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+
+.tooltip-source {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  padding-top: 6px;
+  border-top: 1px solid rgba(60, 80, 140, 0.15);
+}

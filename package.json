@@ -1,0 +1,16 @@
+{
+  "name": "awaband-scanner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild main.js --bundle --outfile=dist/app.js --format=esm --target=es2022",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.27.0"
+  }
+}
