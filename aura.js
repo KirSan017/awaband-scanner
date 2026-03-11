@@ -61,7 +61,12 @@ export class AuraRenderer {
       }
     }
 
-    if (count > 20) { // need enough skin pixels to be confident
+    // Total sampled pixels; face typically covers 10-30% of frame.
+    // Threshold ~2% filters out warm-toned backgrounds (walls, wood).
+    const totalSampled = Math.floor(width / step) * Math.floor(height / step);
+    const minSkinPixels = Math.max(40, Math.round(totalSampled * 0.02));
+
+    if (count > minSkinPixels) {
       this.faceDetected = true;
       this.framesWithoutFace = 0;
 
