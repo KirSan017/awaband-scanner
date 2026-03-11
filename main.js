@@ -27,13 +27,21 @@ let frameCount = 0;
 let scanStartTime = null;
 
 const EMA_ALPHA = 0.15;
+const EMA_ALPHA_FAST = 0.5; // faster decay when face is lost
+const FACE_LOST_CLEAR_THRESHOLD = 60; // ~2 sec at 30fps
+
+// Neutral biofield values (target when face is lost)
+const NEUTRAL_BIOFIELD = {
+  stability: 50, flow: 50, energy: 50, resonance: 50,
+  vibration: 50, clarity: 50, integrity: 50, luminosity: 50
+};
 
 /** Exponential moving average for biofield parameters */
-function smoothBiofield(raw, prev) {
+function smoothBiofield(raw, prev, alpha = EMA_ALPHA) {
   if (!prev) return { ...raw };
   const result = {};
   for (const key of Object.keys(raw)) {
-    result[key] = Math.round(prev[key] * (1 - EMA_ALPHA) + raw[key] * EMA_ALPHA);
+    result[key] = Math.round(prev[key] * (1 - alpha) + raw[key] * alpha);
   }
   return result;
 }
@@ -491,19 +499,32 @@ async function startScanning() {
     if (video.readyState >= 2) {
       offCtx.drawImage(video, 0, 0, offscreen.width, offscreen.height);
 
-      // Extract forehead ROI and feed to rPPG
-      const roi = getForeheadROI(offscreen.width, offscreen.height);
-      const { r, g, b } = extractROIPixels(offCtx, roi);
-      rppg.addFrame(r, g, b);
+      // Only feed data to processors when face is detected
+      // (prevents background/wall data from contaminating buffers)
+      const faceOK = auraRenderer.faceDetected;
 
-      // Feed vibraimage processor (face region — wider than forehead ROI)
-      const faceROI = {
-        x: Math.round(offscreen.width * 0.2),
-        y: Math.round(offscreen.height * 0.1),
-        w: Math.round(offscreen.width * 0.6),
-        h: Math.round(offscreen.height * 0.7)
-      };
-      vibraimageProc.processFrame(offCtx, faceROI);
+      if (faceOK) {
+        // Extract forehead ROI and feed to rPPG
+        const roi = getForeheadROI(offscreen.width, offscreen.height);
+        const { r, g, b } = extractROIPixels(offCtx, roi);
+        rppg.addFrame(r, g, b);
+
+        // Feed vibraimage processor (face region — wider than forehead ROI)
+        const faceROI = {
+          x: Math.round(offscreen.width * 0.2),
+          y: Math.round(offscreen.height * 0.1),
+          w: Math.round(offscreen.width * 0.6),
+          h: Math.round(offscreen.height * 0.7)
+        };
+        vibraimageProc.processFrame(offCtx, faceROI);
+      }
+
+      // Clear buffers after prolonged face loss (~2 sec)
+      if (auraRenderer.framesWithoutFace >= FACE_LOST_CLEAR_THRESHOLD) {
+        rppg.clearBuffer();
+        vibraimageProc.reset();
+        hrSmoothed = null;
+      }
     }
 
     frameCount++;
@@ -565,20 +586,33 @@ async function startScanning() {
       // Vibraimage metrics
       const vibraimageMetrics = vibraimageProc.getMetrics();
 
-      // Map to biofield
+      // Map to biofield — use fast decay toward neutral when face is lost
+      const facePresent = auraRenderer.faceDetected;
       const vitals = { hr, hrv, sdnn, pnn50, lfhf, stressIndex, breathingRate, coherence, hrSmoothed };
-      const rawBiofield = mapToBiofield(vitals, voiceMetrics, vibraimageMetrics);
-      smoothedBiofield = smoothBiofield(rawBiofield, smoothedBiofield);
+
+      if (facePresent) {
+        const rawBiofield = mapToBiofield(vitals, voiceMetrics, vibraimageMetrics);
+        smoothedBiofield = smoothBiofield(rawBiofield, smoothedBiofield);
+      } else {
+        // Decay toward neutral values with fast alpha
+        smoothedBiofield = smoothBiofield(NEUTRAL_BIOFIELD, smoothedBiofield, EMA_ALPHA_FAST);
+      }
       lastBiofield = smoothedBiofield;
-      lastHR = hr;
+      lastHR = facePresent ? hr : null;
 
       // Update status
-      if (fullness < 0.25) {
+      if (!facePresent) {
+        statusEl.textContent = '\u041b\u0438\u0446\u043e \u043d\u0435 \u043e\u0431\u043d\u0430\u0440\u0443\u0436\u0435\u043d\u043e';
+        statusEl.classList.add('face-lost');
+      } else if (fullness < 0.25) {
         statusEl.textContent = '\u041a\u0430\u043b\u0438\u0431\u0440\u043e\u0432\u043a\u0430...';
+        statusEl.classList.remove('face-lost');
       } else if (hr !== null) {
         statusEl.textContent = `HR: ${hr} bpm`;
+        statusEl.classList.remove('face-lost');
       } else {
         statusEl.textContent = `\u0417\u0430\u0445\u0432\u0430\u0442 \u0441\u0438\u0433\u043d\u0430\u043b\u0430... ${Math.round(fullness * 100)}%`;
+        statusEl.classList.remove('face-lost');
       }
 
       // Update HUD data readouts

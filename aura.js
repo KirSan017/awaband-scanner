@@ -23,6 +23,9 @@ export class AuraRenderer {
     // VoiceBio active center (-1 = none)
     this.activeCenter = -1;
     this.activeCenterSmoothed = -1;
+    // Face detection state
+    this.faceDetected = false;
+    this.framesWithoutFace = 0;
   }
 
   /**
@@ -59,6 +62,9 @@ export class AuraRenderer {
     }
 
     if (count > 20) { // need enough skin pixels to be confident
+      this.faceDetected = true;
+      this.framesWithoutFace = 0;
+
       // Centroid normalized to 0-1, mirrored X (camera is mirrored)
       const rawX = 1 - (sumX / count) / width;
       const rawCentroidY = (sumY / count) / height;
@@ -74,6 +80,9 @@ export class AuraRenderer {
       this.faceX = this.faceX * 0.75 + rawX * 0.25;
       this.faceY = this.faceY * 0.75 + rawY * 0.25;
       this.faceScale = this.faceScale * 0.85 + rawScale * 0.15;
+    } else {
+      this.faceDetected = false;
+      this.framesWithoutFace++;
     }
   }
 

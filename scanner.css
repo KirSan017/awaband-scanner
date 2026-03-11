@@ -568,6 +568,18 @@ body {
   clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 8px 100%, 0 50%);
 }
 
+.scan-status.face-lost {
+  color: var(--accent2);
+  border-color: rgba(255, 51, 102, 0.3);
+  background: rgba(255, 51, 102, 0.06);
+  animation: faceLostPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes faceLostPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
 .scan-stop-btn {
   width: 34px; height: 34px;
   border: 1.5px solid var(--accent2);

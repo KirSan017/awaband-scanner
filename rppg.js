@@ -111,6 +111,16 @@ export class RPPGProcessor {
   get bufferFullness() {
     return this.rBuffer.length / BUFFER_SIZE;
   }
+
+  /**
+   * Очистить буферы RGB. Вызывается при потере лица,
+   * чтобы старые данные не загрязняли новые измерения.
+   */
+  clearBuffer() {
+    this.rBuffer = [];
+    this.gBuffer = [];
+    this.bBuffer = [];
+  }
 }
 
 /**
