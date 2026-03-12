@@ -620,6 +620,81 @@ body {
   background: rgba(0, 255, 204, 0.12);
 }
 
+/* HD mode button */
+.scan-hd-btn {
+  width: 34px; height: 34px;
+  border: 1.5px solid rgba(0, 255, 204, 0.25);
+  background: rgba(0, 255, 204, 0.04);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.3s;
+  flex-shrink: 0;
+  letter-spacing: -0.02em;
+}
+
+.scan-hd-btn:active {
+  background: rgba(0, 255, 204, 0.12);
+}
+
+.scan-hd-btn.active {
+  background: rgba(0, 255, 204, 0.15);
+  border-color: var(--accent);
+  box-shadow: 0 0 12px rgba(0, 255, 204, 0.3);
+}
+
+.scan-hd-btn.loading {
+  border-color: rgba(0, 255, 204, 0.4);
+  animation: hdSpin 1s linear infinite;
+  position: relative;
+}
+
+.scan-hd-btn.loading::after {
+  content: '';
+  width: 14px; height: 14px;
+  border: 2px solid transparent;
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: hdSpin 0.8s linear infinite;
+}
+
+@keyframes hdSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* Toast notification */
+.scan-toast {
+  position: absolute;
+  bottom: 120px;
+  left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  padding: 8px 20px;
+  background: rgba(6, 9, 16, 0.95);
+  border: 1px solid rgba(255, 51, 102, 0.3);
+  color: var(--accent2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  z-index: 40;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s, visibility 0.3s, transform 0.3s;
+  white-space: nowrap;
+  clip-path: polygon(6px 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, calc(100% - 6px) 100%, 0 calc(100% - 6px), 0 0);
+}
+
+.scan-toast.visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
 /* Heart rate pulse indicator — bottom of viewport */
 .pulse-indicator {
   position: absolute;

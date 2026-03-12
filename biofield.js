@@ -29,9 +29,10 @@ function norm(value, min, max, invert = false) {
  * @param {{ hr: number|null, hrv: number|null, sdnn: number|null, pnn50: number|null, lfhf: number|null, stressIndex: number|null, breathingRate: number|null, coherence: number|null, hrSmoothed: number|null }} vitals
  * @param {{ pitch: number|null, jitter: number|null, shimmer: number|null, hnr: number|null, rms: number|null, spectralCentroid: number|null, formants: number[]|null, voiceBioCenter: number|null }} voice
  * @param {{ amplitude: number|null, frequency: number|null, symmetry: number|null, entropy: number|null }|null} vibraimage
+ * @param {{ laughing: boolean, smiling: boolean, laughIntensity: number, smileIntensity: number }|null} emotions
  * @returns {{ stability: number, flow: number, energy: number, resonance: number, vibration: number, clarity: number, integrity: number, luminosity: number }}
  */
-export function mapToBiofield(vitals, voice, vibraimage = null) {
+export function mapToBiofield(vitals, voice, vibraimage = null, emotions = null) {
   const vib = vibraimage || { amplitude: null, frequency: null, symmetry: null, entropy: null };
 
   // 1. Стабильность — HRV (RMSSD + SDNN) + vibraimage symmetry
@@ -127,16 +128,32 @@ export function mapToBiofield(vitals, voice, vibraimage = null) {
   }
   const clarity = Math.min(100, clarityBase);
 
+  // ── Emotion bonuses (laugh/smile) ──
+  let eFinal = energy, fFinal = flow, sFinal = stability, rFinal = resonance;
+
+  if (emotions) {
+    const li = (emotions.laughIntensity || 0) / 100; // 0-1
+    const si = (emotions.smileIntensity || 0) / 100; // 0-1
+
+    // Laugh → Energy +5..+15, Flow +5..+10
+    eFinal = Math.min(100, energy + Math.round(li * 15));
+    fFinal = Math.min(100, flow + Math.round(li * 10));
+
+    // Smile → Stability +5..+10, Resonance +5..+10
+    sFinal = Math.min(100, stability + Math.round(si * 10));
+    rFinal = Math.min(100, resonance + Math.round(si * 10));
+  }
+
   // 7. Целостность — consistency of all parameters (low spread)
-  const params = [stability, flow, energy, resonance, vibration, clarity];
+  const params = [sFinal, fFinal, eFinal, rFinal, vibration, clarity];
   const mean = params.reduce((a, b) => a + b) / params.length;
   const variance = params.reduce((s, v) => s + (v - mean) ** 2, 0) / params.length;
   const consistency = Math.max(0, 100 - Math.sqrt(variance) * 3);
   const integrity = Math.round(consistency);
 
   // Светимость — weighted average of all 7
-  const all = [stability, flow, energy, resonance, vibration, clarity, integrity];
+  const all = [sFinal, fFinal, eFinal, rFinal, vibration, clarity, integrity];
   const luminosity = Math.round(all.reduce((a, b) => a + b) / all.length);
 
-  return { stability, flow, energy, resonance, vibration, clarity, integrity, luminosity };
+  return { stability: sFinal, flow: fFinal, energy: eFinal, resonance: rFinal, vibration, clarity, integrity, luminosity };
 }

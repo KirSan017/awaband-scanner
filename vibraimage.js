@@ -16,6 +16,8 @@ export class VibraimageProcessor {
     this.prevFrameData = null;
     this.diffHistory = [];       // rolling buffer of frame diff magnitudes
     this.symmetryHistory = [];   // rolling buffer of L/R asymmetry
+    this.upperDiffHistory = [];  // rolling buffer of upper-half diff
+    this.lowerDiffHistory = [];  // rolling buffer of lower-half diff
     this.maxHistory = 128;       // ~4 seconds at 30fps
     this.frameCount = 0;
   }
@@ -40,11 +42,15 @@ export class VibraimageProcessor {
     let totalDiff = 0;
     let leftDiff = 0, rightDiff = 0;
     let leftPixels = 0, rightPixels = 0;
+    let upperDiff = 0, lowerDiff = 0;
+    let upperPixels = 0, lowerPixels = 0;
     const halfW = Math.floor(roi.w / 2);
+    const halfH = Math.floor(roi.h / 2);
 
     for (let i = 0; i < data.length; i += 4) {
       const pixelIdx = i / 4;
       const x = pixelIdx % roi.w;
+      const y = Math.floor(pixelIdx / roi.w);
 
       // Luminance: 0.299R + 0.587G + 0.114B
       const lumCurr = data[i] * 0.299 + data[i+1] * 0.587 + data[i+2] * 0.114;
@@ -61,6 +67,15 @@ export class VibraimageProcessor {
         rightDiff += diff;
         rightPixels++;
       }
+
+      // Upper/lower split for smile detection
+      if (y < halfH) {
+        upperDiff += diff;
+        upperPixels++;
+      } else {
+        lowerDiff += diff;
+        lowerPixels++;
+      }
     }
 
     // Average diff per pixel (0-255 range, typically 0-10 for micro-movements)
@@ -72,12 +87,20 @@ export class VibraimageProcessor {
     const maxLR = Math.max(leftAvg, rightAvg, 0.001);
     const asymmetry = Math.abs(leftAvg - rightAvg) / maxLR;
 
+    // Upper/lower average diffs
+    const upperAvg = upperPixels > 0 ? upperDiff / upperPixels : 0;
+    const lowerAvg = lowerPixels > 0 ? lowerDiff / lowerPixels : 0;
+
     // Store history
     this.diffHistory.push(avgDiff);
     this.symmetryHistory.push(asymmetry);
+    this.upperDiffHistory.push(upperAvg);
+    this.lowerDiffHistory.push(lowerAvg);
     if (this.diffHistory.length > this.maxHistory) {
       this.diffHistory.shift();
       this.symmetryHistory.shift();
+      this.upperDiffHistory.shift();
+      this.lowerDiffHistory.shift();
     }
 
     // Save current frame for next comparison
@@ -87,7 +110,7 @@ export class VibraimageProcessor {
 
   /**
    * Get current vibraimage metrics.
-   * @returns {{ amplitude: number, frequency: number, symmetry: number, entropy: number } | null}
+   * @returns {{ amplitude: number, frequency: number, symmetry: number, entropy: number, amplitudeLower: number } | null}
    */
   getMetrics() {
     if (this.diffHistory.length < 30) return null;
@@ -99,6 +122,10 @@ export class VibraimageProcessor {
     const meanDiff = hist.reduce((a, b) => a + b, 0) / N;
     // Typical micro-tremor: 0.5-5.0 avg pixel diff → map to 0-100
     const amplitude = Math.min(100, Math.round((meanDiff / 4) * 100));
+
+    // ── Amplitude Lower: lower-face region movement (for smile detection) ──
+    const meanLowerDiff = this.lowerDiffHistory.reduce((a, b) => a + b, 0) / this.lowerDiffHistory.length;
+    const amplitudeLower = Math.min(100, Math.round((meanLowerDiff / 4) * 100));
 
     // ── Frequency: dominant oscillation frequency via zero-crossing rate ──
     const mean = meanDiff;
@@ -134,7 +161,7 @@ export class VibraimageProcessor {
     // High entropy = irregular/chaotic, low = repetitive/calm
     const entropy = Math.min(100, Math.round((entropySum / 3.32) * 100));
 
-    return { amplitude, frequency, symmetry, entropy };
+    return { amplitude, frequency, symmetry, entropy, amplitudeLower };
   }
 
   /** Reset processor state */
@@ -142,6 +169,8 @@ export class VibraimageProcessor {
     this.prevFrameData = null;
     this.diffHistory = [];
     this.symmetryHistory = [];
+    this.upperDiffHistory = [];
+    this.lowerDiffHistory = [];
     this.frameCount = 0;
   }
 }

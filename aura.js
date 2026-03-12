@@ -26,6 +26,10 @@ export class AuraRenderer {
     // Face detection state
     this.faceDetected = false;
     this.framesWithoutFace = 0;
+    // Emotion state
+    this.emotions = null;
+    // Laugh sparkle particles
+    this._particles = [];
   }
 
   /**
@@ -105,6 +109,14 @@ export class AuraRenderer {
   }
 
   /**
+   * Set current emotion state for visual effects.
+   * @param {{ laughing: boolean, smiling: boolean, laughIntensity: number, smileIntensity: number }|null} emotions
+   */
+  setEmotions(emotions) {
+    this.emotions = emotions;
+  }
+
+  /**
    * Render aura glow layers, sacred geometry, and VoiceBio highlighting.
    * @param {{ stability: number, flow: number, energy: number, resonance: number, vibration: number, clarity: number, integrity: number }} params
    * @param {number|null} heartRate - BPM for pulse sync
@@ -145,13 +157,20 @@ export class AuraRenderer {
       const isActive = this.activeCenter >= 0 && Math.abs(i - this.activeCenterSmoothed) < 1;
       const voiceBioBoost = isActive ? 0.15 : 0;
 
+      // Smile boost: layer 3 (Resonance, green) gets extra alpha + gentle pulsation
+      let smileBoost = 0;
+      if (i === 3 && this.emotions && this.emotions.smiling) {
+        const si = this.emotions.smileIntensity / 100;
+        smileBoost = si * 0.15 * (0.8 + 0.2 * Math.sin(this.pulsePhase * 0.5));
+      }
+
       const gradient = ctx.createRadialGradient(
         centerX, centerY, radius * 0.2,
         centerX, centerY, radius
       );
 
       const color = PARAM_COLORS[i];
-      const alpha = 0.08 + value * 0.2 + voiceBioBoost;
+      const alpha = 0.08 + value * 0.2 + voiceBioBoost + smileBoost;
       gradient.addColorStop(0, color + '00');
       gradient.addColorStop(0.3, hexToRGBA(color, alpha * 0.3));
       gradient.addColorStop(0.6, hexToRGBA(color, alpha));
@@ -175,6 +194,9 @@ export class AuraRenderer {
 
     // Sacred geometry overlay — drawn on top of glow layers
     this._drawSacredGeometry(ctx, centerX, centerY, scale, values, avgValue);
+
+    // Emotion visual effects
+    this._updateAndDrawParticles(ctx, centerX, centerY, scale);
   }
 
   /**
@@ -192,7 +214,10 @@ export class AuraRenderer {
     ctx.globalCompositeOperation = 'screen';
 
     // ── 1. Flower of Life: 6 overlapping circles around center ──
-    const flowerRadius = (50 + values[3] * 0.5) * scale; // Resonance drives size
+    const smileScale = (this.emotions && this.emotions.smiling)
+      ? 1 + (this.emotions.smileIntensity / 100) * 0.15
+      : 1;
+    const flowerRadius = (50 + values[3] * 0.5) * scale * smileScale; // Resonance drives size, smile enlarges
     const petalAlpha = alpha * 0.4 * (values[3] / 100);
 
     if (petalAlpha > 0.01) {
@@ -275,6 +300,73 @@ export class AuraRenderer {
     }
 
     ctx.restore();
+  }
+
+  /**
+   * Update and draw laugh sparkle particles.
+   * Spawns golden particles when laughing, updates physics, draws with alpha fade.
+   * @private
+   */
+  _updateAndDrawParticles(ctx, cx, cy, scale) {
+    const now = performance.now();
+
+    // Spawn new particles when laughing
+    if (this.emotions && this.emotions.laughing) {
+      const intensity = this.emotions.laughIntensity / 100;
+      const count = Math.round(2 + intensity * 4); // 2-6 particles per frame
+      for (let i = 0; i < count; i++) {
+        const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 0.8;
+        const speed = (1.5 + Math.random() * 2.5) * scale;
+        this._particles.push({
+          x: cx + (Math.random() - 0.5) * 30 * scale,
+          y: cy - 10 * scale,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: 1.0,
+          decay: 0.015 + Math.random() * 0.02,
+          size: (2 + intensity * 3) * scale,
+          born: now
+        });
+      }
+    }
+
+    // Update and draw
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+
+    for (let i = this._particles.length - 1; i >= 0; i--) {
+      const p = this._particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy -= 0.02 * scale; // slight upward drift
+      p.life -= p.decay;
+
+      if (p.life <= 0) {
+        this._particles.splice(i, 1);
+        continue;
+      }
+
+      const alpha = p.life * 0.8;
+      ctx.fillStyle = `rgba(255, 215, 0, ${alpha})`; // #FFD700 gold
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Glow
+      if (alpha > 0.3) {
+        ctx.fillStyle = `rgba(255, 215, 0, ${alpha * 0.3})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * p.life * 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    ctx.restore();
+
+    // Cap particle count
+    if (this._particles.length > 100) {
+      this._particles.splice(0, this._particles.length - 100);
+    }
   }
 
   /**

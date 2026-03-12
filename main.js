@@ -8,6 +8,8 @@ import { VibraimageProcessor } from './vibraimage.js';
 import { VoiceAnalyzer } from './voice.js';
 import { mapToBiofield } from './biofield.js';
 import { AuraRenderer } from './aura.js';
+import { EmotionDetector } from './emotion-detector.js';
+import { PersonSegmentation } from './segmentation.js';
 import { AwabandPanel } from './awaband-panel.js';
 
 const SCREENS = ['splash', 'scanning', 'result'];
@@ -18,6 +20,8 @@ let voiceAnalyzer = null;
 let animFrameId = null;
 let rppg = null;
 let vibraimageProc = null;
+let emotionDetector = null;
+let segmentation = null;
 let auraRenderer = null;
 let awabandPanel = null;
 let lastBiofield = null;
@@ -123,6 +127,11 @@ function buildScanning() {
   const status = el('div', 'scan-status', { text: '\u041a\u0430\u043b\u0438\u0431\u0440\u043e\u0432\u043a\u0430...' });
   status.id = 'scan-status';
   topbar.appendChild(status);
+
+  const hdBtn = el('button', 'scan-hd-btn', { text: 'HD' });
+  hdBtn.id = 'scan-hd-btn';
+  hdBtn.addEventListener('click', () => toggleHDMode(hdBtn));
+  topbar.appendChild(hdBtn);
 
   const guideBtn = el('button', 'scan-guide-btn', { text: '?' });
   guideBtn.addEventListener('click', () => toggleGuideOverlay());
@@ -431,6 +440,54 @@ function formatElapsed(ms) {
   return `T+${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
 }
 
+/** Toggle HD mode (lazy-load MediaPipe segmentation) */
+async function toggleHDMode(btn) {
+  if (!segmentation) {
+    segmentation = new PersonSegmentation();
+  }
+
+  if (segmentation.isLoaded()) {
+    // Already loaded — toggle off
+    segmentation = null;
+    btn.classList.remove('active', 'loading');
+    btn.textContent = 'HD';
+    return;
+  }
+
+  if (segmentation.isLoading()) return;
+
+  // Start loading
+  btn.classList.add('loading');
+  btn.textContent = '';
+
+  const ok = await segmentation.load();
+
+  if (ok) {
+    btn.classList.remove('loading');
+    btn.classList.add('active');
+    btn.textContent = 'HD';
+  } else {
+    btn.classList.remove('loading');
+    btn.textContent = 'HD';
+    // Show toast
+    showToast('HD недоступен — загрузка не удалась');
+    segmentation = null;
+  }
+}
+
+/** Show a temporary toast message */
+function showToast(msg) {
+  let toast = document.getElementById('scan-toast');
+  if (!toast) {
+    toast = el('div', 'scan-toast');
+    toast.id = 'scan-toast';
+    document.querySelector('#scanning')?.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.classList.add('visible');
+  setTimeout(() => toast.classList.remove('visible'), 3000);
+}
+
 /** Start the scanning session */
 async function startScanning() {
   showScreen('scanning');
@@ -448,6 +505,8 @@ async function startScanning() {
   // Initialize processors
   rppg = new RPPGProcessor();
   vibraimageProc = new VibraimageProcessor();
+  emotionDetector = new EmotionDetector();
+  segmentation = null;
   frameCount = 0;
   lastBiofield = null;
   smoothedBiofield = null;
@@ -523,6 +582,7 @@ async function startScanning() {
       if (auraRenderer.framesWithoutFace >= FACE_LOST_CLEAR_THRESHOLD) {
         rppg.clearBuffer();
         vibraimageProc.reset();
+        emotionDetector.reset();
         hrSmoothed = null;
       }
     }
@@ -586,12 +646,16 @@ async function startScanning() {
       // Vibraimage metrics
       const vibraimageMetrics = vibraimageProc.getMetrics();
 
+      // Emotion detection (laugh/smile)
+      const emotions = emotionDetector.update(voiceMetrics, vibraimageMetrics);
+      auraRenderer.setEmotions(emotions);
+
       // Map to biofield — use fast decay toward neutral when face is lost
       const facePresent = auraRenderer.faceDetected;
       const vitals = { hr, hrv, sdnn, pnn50, lfhf, stressIndex, breathingRate, coherence, hrSmoothed };
 
       if (facePresent) {
-        const rawBiofield = mapToBiofield(vitals, voiceMetrics, vibraimageMetrics);
+        const rawBiofield = mapToBiofield(vitals, voiceMetrics, vibraimageMetrics, emotions);
         smoothedBiofield = smoothBiofield(rawBiofield, smoothedBiofield);
       } else {
         // Decay toward neutral values with fast alpha
@@ -632,6 +696,18 @@ async function startScanning() {
 
       // Update panel
       awabandPanel.update(lastBiofield);
+    }
+
+    // HD segmentation: apply background blur when model is loaded
+    if (segmentation && segmentation.isLoaded() && video.readyState >= 2 && frameCount % 3 === 0) {
+      segmentation.getMask(video).then(maskData => {
+        if (maskData) {
+          segmentation.applyBackgroundBlur(offCtx, video, maskData, 12);
+          // Update face detection to be always accurate with mask
+          auraRenderer.faceDetected = true;
+          auraRenderer.framesWithoutFace = 0;
+        }
+      });
     }
 
     // Render aura every frame for smooth animation
