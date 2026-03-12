@@ -95,6 +95,34 @@ export class AuraRenderer {
     }
   }
 
+  /**
+   * Update face state from a bounding box produced by a stronger detector.
+   * @param {{ x: number, y: number, width: number, height: number }|null} box
+   * @param {number} frameWidth
+   * @param {number} frameHeight
+   */
+  updateFaceFromBox(box, frameWidth, frameHeight) {
+    if (!box) {
+      this.faceDetected = false;
+      this.framesWithoutFace++;
+      return;
+    }
+
+    this.faceDetected = true;
+    this.framesWithoutFace = 0;
+
+    const rawX = 1 - ((box.x + box.width / 2) / frameWidth);
+    const rawCentroidY = (box.y + box.height / 2) / frameHeight;
+    const faceH = box.height / frameHeight;
+    const rawY = rawCentroidY - faceH * 0.35;
+    const faceW = box.width / frameWidth;
+    const rawScale = Math.max(0.6, Math.min(2.0, faceW * 3.5));
+
+    this.faceX = this.faceX * 0.75 + rawX * 0.25;
+    this.faceY = this.faceY * 0.75 + rawY * 0.25;
+    this.faceScale = this.faceScale * 0.85 + rawScale * 0.15;
+  }
+
   resize(width, height) {
     this.canvas.width = width;
     this.canvas.height = height;

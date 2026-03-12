@@ -124,7 +124,7 @@ export class PersonSegmentation {
       this._maskCanvas = document.createElement('canvas');
       this._maskCanvas.width = w;
       this._maskCanvas.height = h;
-      this._maskCtx = this._maskCanvas.getContext('2d');
+      this._maskCtx = this._maskCanvas.getContext('2d', { willReadFrequently: true });
     }
 
     this._maskCtx.drawImage(mask, 0, 0);
@@ -182,7 +182,7 @@ export class PersonSegmentation {
     // Ensure tmp canvas for mask scaling
     if (!this._tmpCanvas) {
       this._tmpCanvas = document.createElement('canvas');
-      this._tmpCtx = this._tmpCanvas.getContext('2d');
+      this._tmpCtx = this._tmpCanvas.getContext('2d', { willReadFrequently: true });
     }
 
     // Put mask data into tmp canvas at original size
@@ -195,7 +195,7 @@ export class PersonSegmentation {
       this._maskCanvas = document.createElement('canvas');
       this._maskCanvas.width = width;
       this._maskCanvas.height = height;
-      this._maskCtx = this._maskCanvas.getContext('2d');
+      this._maskCtx = this._maskCanvas.getContext('2d', { willReadFrequently: true });
     }
     this._maskCtx.drawImage(this._tmpCanvas, 0, 0, width, height);
 

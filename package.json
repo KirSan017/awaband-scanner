@@ -5,6 +5,11 @@
   "type": "module",
   "scripts": {
     "build": "esbuild main.js --bundle --outfile=dist/app.js --format=esm --target=es2022",
+    "build:site": "npm run build && node scripts/build-static-site.mjs",
+    "fixture:import": "node scripts/import-real-session-fixture.mjs",
+    "fixture:replay": "node scripts/replay-real-session-fixtures.mjs",
+    "fixture:summary": "node scripts/summarize-real-session-fixtures.mjs",
+    "test": "node --test",
     "start": "node server.js"
   },
   "dependencies": {

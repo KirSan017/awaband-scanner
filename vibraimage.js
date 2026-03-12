@@ -103,8 +103,9 @@ export class VibraimageProcessor {
       this.lowerDiffHistory.shift();
     }
 
-    // Save current frame for next comparison
+    // Save current frame and ROI dimensions for next comparison
     this.prevFrameData.set(data);
+    this._lastRoiArea = roi.w * roi.h;
     this.frameCount++;
   }
 
@@ -119,13 +120,15 @@ export class VibraimageProcessor {
     const N = hist.length;
 
     // ── Amplitude: normalized average movement magnitude ──
+    // Scale by ROI area relative to reference 200×150 to normalize across face sizes
+    const roiArea = this._lastRoiArea || (200 * 150);
+    const scaleFactor = Math.sqrt(roiArea / (200 * 150));
     const meanDiff = hist.reduce((a, b) => a + b, 0) / N;
-    // Typical micro-tremor: 0.5-5.0 avg pixel diff → map to 0-100
-    const amplitude = Math.min(100, Math.round((meanDiff / 4) * 100));
+    const amplitude = Math.min(100, Math.round((meanDiff / (4 * scaleFactor)) * 100));
 
     // ── Amplitude Lower: lower-face region movement (for smile detection) ──
     const meanLowerDiff = this.lowerDiffHistory.reduce((a, b) => a + b, 0) / this.lowerDiffHistory.length;
-    const amplitudeLower = Math.min(100, Math.round((meanLowerDiff / 4) * 100));
+    const amplitudeLower = Math.min(100, Math.round((meanLowerDiff / (4 * scaleFactor)) * 100));
 
     // ── Frequency: dominant oscillation frequency via zero-crossing rate ──
     const mean = meanDiff;
@@ -135,8 +138,8 @@ export class VibraimageProcessor {
     }
     // ~30fps, crossings/2 = oscillations per buffer, normalize to 0-100
     const oscillationsPerSec = (crossings / 2) / (N / 30);
-    // Normal micro-tremor: 2-15 Hz → map to 0-100
-    const frequency = Math.min(100, Math.round((oscillationsPerSec / 12) * 100));
+    // Normal micro-tremor: 2-15 Hz → map to 0-100, scaled by ROI
+    const frequency = Math.min(100, Math.round((oscillationsPerSec / (12 * Math.max(0.5, scaleFactor))) * 100));
 
     // ── Symmetry: L/R balance (low asymmetry = high symmetry score) ──
     const meanAsym = this.symmetryHistory.reduce((a, b) => a + b, 0) / this.symmetryHistory.length;
@@ -172,5 +175,20 @@ export class VibraimageProcessor {
     this.upperDiffHistory = [];
     this.lowerDiffHistory = [];
     this.frameCount = 0;
+  }
+
+  /**
+   * Snapshot current rolling histories for export/debug purposes.
+   * @returns {{ maxHistory: number, frameCount: number, diffHistory: number[], symmetryHistory: number[], upperDiffHistory: number[], lowerDiffHistory: number[] }}
+   */
+  getExportSnapshot() {
+    return {
+      maxHistory: this.maxHistory,
+      frameCount: this.frameCount,
+      diffHistory: [...this.diffHistory],
+      symmetryHistory: [...this.symmetryHistory],
+      upperDiffHistory: [...this.upperDiffHistory],
+      lowerDiffHistory: [...this.lowerDiffHistory],
+    };
   }
 }

@@ -103,6 +103,33 @@ export class RPPGProcessor {
   }
 
   /**
+   * Оценка качества сигнала (SNR) — отношение пиковой мощности к общей
+   * в диапазоне пульса 40-180 BPM.
+   *
+   * @returns {number | null} Качество 0-100 или null, если сигнал недоступен.
+   */
+  getSignalQuality() {
+    const signal = this.getPulseSignal();
+    if (!signal) return null;
+
+    const spectrum = fft(signal);
+    const minBin = Math.floor(0.67 * signal.length / FPS);
+    const maxBin = Math.ceil(3.0 * signal.length / FPS);
+
+    let peakPower = 0;
+    let totalPower = 0;
+    for (let i = minBin; i <= maxBin && i < spectrum.length; i++) {
+      const power = spectrum[i] * spectrum[i];
+      totalPower += power;
+      if (power > peakPower) peakPower = power;
+    }
+
+    if (totalPower === 0) return 0;
+    const snr = peakPower / totalPower;
+    return Math.min(100, Math.round(snr * 400));
+  }
+
+  /**
    * Заполненность буфера (0..1). Используется для отображения прогресса
    * пользователю перед первым измерением.
    *
@@ -120,6 +147,25 @@ export class RPPGProcessor {
     this.rBuffer = [];
     this.gBuffer = [];
     this.bBuffer = [];
+  }
+
+  /**
+   * Snapshot current rolling buffers for export/debug purposes.
+   * @param {number[]|null} pulseSignal
+   * @returns {{ fps: number, bufferSize: number, bufferFullness: number, rgb: { r: number[], g: number[], b: number[] }, pulseSignal: number[]|null }}
+   */
+  getExportSnapshot(pulseSignal = null) {
+    return {
+      fps: FPS,
+      bufferSize: BUFFER_SIZE,
+      bufferFullness: this.bufferFullness,
+      rgb: {
+        r: [...this.rBuffer],
+        g: [...this.gBuffer],
+        b: [...this.bBuffer],
+      },
+      pulseSignal: pulseSignal ? [...pulseSignal] : null,
+    };
   }
 }
 

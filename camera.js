@@ -29,13 +29,29 @@ export function stopCamera(stream) {
 }
 
 /**
- * Returns a fixed ROI rectangle targeting the forehead area.
- * Center third horizontally, upper 15-30% vertically.
+ * Returns a ROI rectangle targeting the forehead area.
+ * If facePos is provided (from aura.js face detection), ROI follows the face.
+ * Otherwise falls back to fixed center third.
+ *
  * @param {number} videoWidth
  * @param {number} videoHeight
+ * @param {{ x: number, y: number, scale: number }|null} facePos - normalized face position (0-1), x already mirror-corrected
  * @returns {{ x: number, y: number, w: number, h: number }}
  */
-export function getForeheadROI(videoWidth, videoHeight) {
+export function getForeheadROI(videoWidth, videoHeight, facePos = null) {
+  if (facePos) {
+    const scale = facePos.scale || 1;
+    const roiW = Math.round(videoWidth * 0.25 * scale);
+    const roiH = Math.round(videoHeight * 0.12 * scale);
+    // Forehead: slightly above face center
+    const cx = Math.round(facePos.x * videoWidth);
+    const cy = Math.round((facePos.y - 0.15 * scale) * videoHeight);
+    const x = Math.max(0, Math.min(videoWidth - roiW, cx - Math.round(roiW / 2)));
+    const y = Math.max(0, Math.min(videoHeight - roiH, cy - Math.round(roiH / 2)));
+    return { x, y, w: roiW, h: roiH };
+  }
+
+  // Fallback: fixed center third
   const w = Math.round(videoWidth / 3);
   const h = Math.round(videoHeight * 0.15);
   const x = Math.round(videoWidth / 3);

@@ -315,6 +315,31 @@ body {
   text-transform: uppercase;
 }
 
+.scan-sim-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 176, 87, 0.28);
+  background: rgba(40, 22, 8, 0.72);
+  color: #ffcf8a;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%, 0 8px);
+  box-shadow: 0 0 0 1px rgba(255, 176, 87, 0.06), 0 14px 28px rgba(0, 0, 0, 0.18);
+}
+
+.splash-sim-badge {
+  position: absolute;
+  top: calc(50% + 112px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+}
+
 /* ==================== SCANNING SCREEN ==================== */
 
 #scanning {
@@ -575,6 +600,105 @@ body {
   animation: faceLostPulse 1.5s ease-in-out infinite;
 }
 
+.scan-sensor-strip {
+  display: flex;
+  gap: 8px;
+  padding: 0 16px 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+  position: relative;
+  z-index: 15;
+}
+
+.scan-topbar .scan-sim-badge {
+  flex-shrink: 0;
+}
+
+.scan-sensor-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 108px;
+  padding: 6px 10px;
+  border: 1px solid rgba(0, 255, 204, 0.12);
+  background: rgba(8, 14, 24, 0.72);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  clip-path: polygon(6px 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, calc(100% - 6px) 100%, 0 calc(100% - 6px), 0 0);
+}
+
+.scan-sensor-label {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.scan-sensor-value {
+  color: inherit;
+}
+
+.scan-sensor-chip.state-ready,
+.scan-sensor-chip.state-tracking,
+.scan-sensor-chip.state-active {
+  color: var(--accent);
+  border-color: rgba(0, 255, 204, 0.28);
+}
+
+.scan-sensor-chip.state-warming_up,
+.scan-sensor-chip.state-acquiring,
+.scan-sensor-chip.state-loading,
+.scan-sensor-chip.state-searching,
+.scan-sensor-chip.state-pending {
+  color: #ffd06b;
+  border-color: rgba(255, 208, 107, 0.28);
+}
+
+.scan-sensor-chip.state-weak,
+.scan-sensor-chip.state-lost,
+.scan-sensor-chip.state-denied,
+.scan-sensor-chip.state-unavailable,
+.scan-sensor-chip.state-error {
+  color: var(--accent2);
+  border-color: rgba(255, 51, 102, 0.28);
+}
+
+.scan-debug-panel {
+  display: none;
+  margin: 0 16px 10px;
+  padding: 12px 14px;
+  border: 1px solid rgba(90, 200, 255, 0.18);
+  background:
+    linear-gradient(180deg, rgba(9, 17, 28, 0.92), rgba(5, 10, 18, 0.94));
+  color: var(--text);
+  clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%, 0 10px);
+  position: relative;
+  z-index: 15;
+}
+
+.scan-debug-panel.open {
+  display: block;
+}
+
+.scan-debug-title {
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #5ac8ff;
+  margin-bottom: 8px;
+}
+
+.scan-debug-pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
 @keyframes faceLostPulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
@@ -599,7 +723,9 @@ body {
   background: rgba(255, 51, 102, 0.2);
 }
 
-.scan-guide-btn {
+.scan-guide-btn,
+.scan-debug-btn,
+.scan-export-btn {
   width: 34px; height: 34px;
   border: 1.5px solid rgba(0, 255, 204, 0.25);
   background: rgba(0, 255, 204, 0.04);
@@ -616,8 +742,24 @@ body {
   flex-shrink: 0;
 }
 
-.scan-guide-btn:active {
+.scan-guide-btn:active,
+.scan-debug-btn:active,
+.scan-export-btn:active,
+.scan-debug-btn.active {
   background: rgba(0, 255, 204, 0.12);
+}
+
+.scan-debug-btn {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.scan-export-btn {
+  width: auto;
+  min-width: 48px;
+  padding: 0 8px;
+  font-size: 9px;
+  letter-spacing: 0.08em;
 }
 
 /* HD mode button */
@@ -758,6 +900,7 @@ body {
   gap: 12px;
   padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
   justify-content: center;
+  flex-wrap: wrap;
   flex-shrink: 0;
   background: var(--bg);
 }
@@ -784,6 +927,39 @@ body {
   background: rgba(0, 255, 204, 0.08);
   border-color: rgba(0, 255, 204, 0.3);
   color: var(--accent);
+}
+
+.result-diagnostics {
+  margin: 0 16px 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(0, 255, 204, 0.12);
+  background: rgba(8, 14, 24, 0.78);
+  color: var(--text);
+  clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%, 0 10px);
+}
+
+.result-diagnostics.partial {
+  border-color: rgba(255, 208, 107, 0.32);
+}
+
+.result-diagnostics-title {
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.result-diagnostics-summary,
+.result-diagnostics-details {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+
+.result-diagnostics-details {
+  margin-top: 6px;
 }
 
 /* ==================== AWABAND Panel — Vertical Equalizer ==================== */
@@ -813,6 +989,19 @@ body {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   transition: color 0.5s ease;
+}
+
+.awaband-status {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.45;
+  text-align: center;
+  color: var(--text-dim);
+  margin: 0 4px 10px;
+}
+
+.awaband-status.partial {
+  color: #ffd06b;
 }
 
 /* Equalizer-style vertical bars */
@@ -859,6 +1048,35 @@ body {
   height: 0%;
   transition: height 0.6s cubic-bezier(0.22, 1, 0.36, 1);
   border-radius: 1px 1px 0 0;
+}
+
+/* Confidence: low — semi-transparent, no glow */
+.param-stick-fill.low-confidence {
+  opacity: 0.25;
+  filter: saturate(0.3);
+}
+.param-stick-fill.low-confidence::after {
+  display: none;
+}
+
+/* Confidence: uncertain — diagonal stripes overlay */
+.param-stick-fill.uncertain {
+  opacity: 0.7;
+}
+.param-stick-fill.uncertain::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 3px,
+    rgba(0, 0, 0, 0.3) 3px,
+    rgba(0, 0, 0, 0.3) 5px
+  );
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 1;
 }
 
 /* Glowing top edge */
@@ -991,6 +1209,17 @@ body {
   padding-top: 6px;
   border-top: 1px solid rgba(0, 255, 204, 0.06);
   letter-spacing: 0.02em;
+}
+
+.tooltip-tip {
+  margin-top: 8px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border-left: 2px solid rgba(0, 255, 153, 0.5);
+  border-radius: 0 4px 4px 0;
+  font-size: 0.82em;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.85);
 }
 
 /* ==================== GUIDE OVERLAY (inside scanning) ==================== */
