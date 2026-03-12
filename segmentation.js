@@ -1,29 +1,38 @@
 // segmentation.js — Lazy-loaded MediaPipe Selfie Segmentation
 // Not included in base bundle (~90 KB). Loaded on-demand via HD button.
+// Uses <script> tag injection since MediaPipe SDK is UMD, not ESM.
 
 /**
- * PersonSegmentation provides person/background segmentation using
- * MediaPipe Selfie Segmentation, loaded dynamically from CDN.
- *
- * Usage:
- *   const seg = new PersonSegmentation();
- *   await seg.load();           // dynamic import, shows spinner
- *   const mask = seg.getMask(videoFrame);
- *   const contour = seg.getContour(mask);
+ * Load a script from URL, returning a Promise.
+ * @param {string} url
+ * @returns {Promise<void>}
  */
+function loadScript(url) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = url;
+    s.crossOrigin = 'anonymous';
+    s.onload = resolve;
+    s.onerror = () => reject(new Error(`Failed to load: ${url}`));
+    document.head.appendChild(s);
+  });
+}
+
+const MP_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@0.1';
+
 export class PersonSegmentation {
   constructor() {
     this._model = null;
     this._loading = false;
     this._loaded = false;
     this._error = null;
+    this._latestResults = null;
 
-    // Offscreen canvas for mask processing
+    // Offscreen canvases for mask processing
     this._maskCanvas = null;
     this._maskCtx = null;
-
-    // Cached contour points
-    this._lastContour = null;
+    this._tmpCanvas = null;
+    this._tmpCtx = null;
   }
 
   /** @returns {boolean} Whether the model is loaded and ready */
@@ -42,7 +51,7 @@ export class PersonSegmentation {
   }
 
   /**
-   * Dynamically load MediaPipe Selfie Segmentation from CDN.
+   * Load MediaPipe Selfie Segmentation from CDN via script tag.
    * @returns {Promise<boolean>} true if loaded successfully
    */
   async load() {
@@ -53,30 +62,30 @@ export class PersonSegmentation {
     this._error = null;
 
     try {
-      // Dynamic import from CDN — not bundled
-      const [
-        { SelfieSegmentation },
-      ] = await Promise.all([
-        import('https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@0.1/selfie_segmentation.js'),
-      ]);
+      // Load the MediaPipe script (exposes window.SelfieSegmentation)
+      if (!window.SelfieSegmentation) {
+        await loadScript(`${MP_CDN}/selfie_segmentation.js`);
+      }
+
+      const SelfieSegmentation = window.SelfieSegmentation;
+      if (!SelfieSegmentation) {
+        throw new Error('SelfieSegmentation not found after script load');
+      }
 
       this._model = new SelfieSegmentation({
-        locateFile: (file) =>
-          `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@0.1/${file}`
+        locateFile: (file) => `${MP_CDN}/${file}`
       });
 
       this._model.setOptions({
-        modelSelection: 0, // 0 = general, 1 = landscape (faster but less accurate)
+        modelSelection: 0, // 0 = general (more accurate), 1 = landscape (faster)
         selfieMode: true,
       });
 
-      // Store results callback
-      this._latestResults = null;
       this._model.onResults((results) => {
         this._latestResults = results;
       });
 
-      // Initialize the model
+      // Initialize — downloads the .tflite model (~200 KB) + WASM
       await this._model.initialize();
 
       this._loaded = true;
@@ -93,7 +102,7 @@ export class PersonSegmentation {
   /**
    * Get segmentation mask for a video frame.
    * @param {HTMLVideoElement} video - source video element
-   * @returns {ImageData|null} mask where 255 = person, 0 = background
+   * @returns {Promise<ImageData|null>} mask where 255 = person, 0 = background
    */
   async getMask(video) {
     if (!this._loaded || !this._model) return null;
@@ -118,7 +127,6 @@ export class PersonSegmentation {
       this._maskCtx = this._maskCanvas.getContext('2d');
     }
 
-    // Draw mask to canvas and extract ImageData
     this._maskCtx.drawImage(mask, 0, 0);
     return this._maskCtx.getImageData(0, 0, w, h);
   }
@@ -130,53 +138,37 @@ export class PersonSegmentation {
    * @returns {Array<{x: number, y: number}>} contour points
    */
   getContour(maskData) {
-    if (!maskData) return this._lastContour || [];
+    if (!maskData) return [];
 
     const { data, width, height } = maskData;
     const points = [];
-    const step = 4; // sample every 4th row for performance
+    const step = 4;
 
     for (let y = 0; y < height; y += step) {
       let leftEdge = -1;
       let rightEdge = -1;
 
-      // Scan left to right for first person pixel
       for (let x = 0; x < width; x++) {
         const idx = (y * width + x) * 4;
-        if (data[idx] > 128) {
-          leftEdge = x;
-          break;
-        }
+        if (data[idx] > 128) { leftEdge = x; break; }
       }
 
-      // Scan right to left for last person pixel
       for (let x = width - 1; x >= 0; x--) {
         const idx = (y * width + x) * 4;
-        if (data[idx] > 128) {
-          rightEdge = x;
-          break;
-        }
+        if (data[idx] > 128) { rightEdge = x; break; }
       }
 
-      if (leftEdge >= 0) {
-        points.push({ x: leftEdge / width, y: y / height, side: 'left' });
-      }
-      if (rightEdge >= 0 && rightEdge !== leftEdge) {
-        points.push({ x: rightEdge / width, y: y / height, side: 'right' });
-      }
+      if (leftEdge >= 0) points.push({ x: leftEdge / width, y: y / height, side: 'left' });
+      if (rightEdge >= 0 && rightEdge !== leftEdge) points.push({ x: rightEdge / width, y: y / height, side: 'right' });
     }
 
-    // Sort: left edge top→bottom, right edge bottom→top (forms closed contour)
     const leftPoints = points.filter(p => p.side === 'left').sort((a, b) => a.y - b.y);
     const rightPoints = points.filter(p => p.side === 'right').sort((a, b) => b.y - a.y);
-
-    this._lastContour = [...leftPoints, ...rightPoints];
-    return this._lastContour;
+    return [...leftPoints, ...rightPoints];
   }
 
   /**
    * Apply background blur using the segmentation mask.
-   * Draws the video with blurred background to the provided canvas.
    * @param {CanvasRenderingContext2D} ctx - target canvas context
    * @param {HTMLVideoElement} video - source video
    * @param {ImageData} maskData - segmentation mask
@@ -187,34 +179,40 @@ export class PersonSegmentation {
 
     const { width, height } = ctx.canvas;
 
-    // Draw blurred video
-    ctx.save();
-    ctx.filter = `blur(${blurRadius}px)`;
-    ctx.drawImage(video, 0, 0, width, height);
-    ctx.filter = 'none';
+    // Ensure tmp canvas for mask scaling
+    if (!this._tmpCanvas) {
+      this._tmpCanvas = document.createElement('canvas');
+      this._tmpCtx = this._tmpCanvas.getContext('2d');
+    }
 
-    // Create mask from segmentation data
+    // Put mask data into tmp canvas at original size
+    this._tmpCanvas.width = maskData.width;
+    this._tmpCanvas.height = maskData.height;
+    this._tmpCtx.putImageData(maskData, 0, 0);
+
+    // Scale mask to output size
     if (!this._maskCanvas || this._maskCanvas.width !== width || this._maskCanvas.height !== height) {
       this._maskCanvas = document.createElement('canvas');
       this._maskCanvas.width = width;
       this._maskCanvas.height = height;
       this._maskCtx = this._maskCanvas.getContext('2d');
     }
+    this._maskCtx.drawImage(this._tmpCanvas, 0, 0, width, height);
 
-    // Scale mask to canvas size
-    const tmpCanvas = document.createElement('canvas');
-    tmpCanvas.width = maskData.width;
-    tmpCanvas.height = maskData.height;
-    const tmpCtx = tmpCanvas.getContext('2d');
-    tmpCtx.putImageData(maskData, 0, 0);
+    // Draw blurred background
+    ctx.save();
+    ctx.filter = `blur(${blurRadius}px)`;
+    ctx.drawImage(video, 0, 0, width, height);
+    ctx.filter = 'none';
 
-    this._maskCtx.drawImage(tmpCanvas, 0, 0, width, height);
-
-    // Composite: draw sharp person on top of blurred background
+    // Cut out person shape from blurred layer
     ctx.globalCompositeOperation = 'destination-out';
     ctx.drawImage(this._maskCanvas, 0, 0);
+
+    // Draw sharp person underneath
     ctx.globalCompositeOperation = 'destination-over';
     ctx.drawImage(video, 0, 0, width, height);
+
     ctx.globalCompositeOperation = 'source-over';
     ctx.restore();
   }
