@@ -34,10 +34,10 @@ const EMA_ALPHA = 0.15;
 const EMA_ALPHA_FAST = 0.5; // faster decay when face is lost
 const FACE_LOST_CLEAR_THRESHOLD = 60; // ~2 sec at 30fps
 
-// Neutral biofield values (target when face is lost)
+// Target biofield values when face is lost (no signal = no reading)
 const NEUTRAL_BIOFIELD = {
-  stability: 50, flow: 50, energy: 50, resonance: 50,
-  vibration: 50, clarity: 50, integrity: 50, luminosity: 50
+  stability: 0, flow: 0, energy: 0, resonance: 0,
+  vibration: 0, clarity: 0, integrity: 0, luminosity: 0
 };
 
 /** Exponential moving average for biofield parameters */
