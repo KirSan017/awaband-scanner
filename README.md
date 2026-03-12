@@ -8,7 +8,7 @@ The current repository already contains:
 - rPPG pulse extraction, HRV metrics, vibraimage-style motion analysis, voice metrics and simple emotion heuristics;
 - quality-aware runtime diagnostics, retained-value handling and a structured JSON export with session timeline and signal buffers;
 - simulation modes for demoing the app without real camera/microphone hardware;
-- optional HD mode via MediaPipe Selfie Segmentation loaded on demand from CDN.
+- optional `ФОКУС` mode via MediaPipe Selfie Segmentation loaded on demand from CDN.
 
 The app is a frontend-only demo. It is not a medical device and does not provide clinical interpretation.
 
@@ -70,7 +70,8 @@ Supported tokens:
 ## Runtime Notes
 
 - `npm start` serves static files from the project root and `dist/` on port `3001`.
-- HD mode is optional and lazy-loads MediaPipe Selfie Segmentation from `jsdelivr`, so it depends on network availability.
+- `ФОКУС` mode is optional and lazy-loads MediaPipe Selfie Segmentation from `jsdelivr`, so it depends on network availability.
+- `ФОКУС` cleans the background and can help keep the subject visually isolated, but it does not make the scan medically more accurate.
 - The result screen can export both `PNG` and a structured `JSON` session dump with timeline samples plus rolling `rPPG` and `vibraimage` buffers.
 - The scanning screen also exposes a quick `JSON` export button for live session capture without switching to the result screen.
 - Live `awaband-scan.json` exports can be imported into `tests/fixtures/real-sessions/` together with `*.meta.json` sidecars for review status, scenario tags and capture context.

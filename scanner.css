@@ -762,20 +762,24 @@ body {
   letter-spacing: 0.08em;
 }
 
-/* HD mode button */
+/* Focus mode button */
 .scan-hd-btn {
-  width: 34px; height: 34px;
+  width: auto;
+  min-width: 62px;
+  height: 34px;
+  padding: 0 10px;
   border: 1.5px solid rgba(0, 255, 204, 0.25);
   background: rgba(0, 255, 204, 0.04);
   color: var(--accent);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
+  letter-spacing: 0.06em;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
+  border-radius: 999px;
   transition: all 0.3s;
   flex-shrink: 0;
   letter-spacing: -0.02em;
@@ -1347,6 +1351,51 @@ body {
   text-transform: uppercase;
   text-align: center;
   margin-bottom: 16px;
+}
+
+.guide-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.guide-status-card {
+  padding: 12px 14px;
+  background: rgba(0, 255, 204, 0.03);
+  border: 1px solid rgba(0, 255, 204, 0.08);
+  border-radius: 14px;
+}
+
+.guide-status-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.guide-status-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  padding: 4px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 255, 204, 0.18);
+  background: rgba(0, 255, 204, 0.06);
+}
+
+.guide-status-title {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-bright);
+}
+
+.guide-status-text {
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--text);
 }
 
 /* Parameter cards */

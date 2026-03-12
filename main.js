@@ -20,7 +20,7 @@ const SENSOR_META = {
   microphone: { id: 'scan-sensor-microphone', label: 'MIC' },
   face: { id: 'scan-sensor-face', label: 'FACE' },
   pulse: { id: 'scan-sensor-pulse', label: 'PULSE' },
-  hdMode: { id: 'scan-sensor-hd', label: 'HD' },
+  hdMode: { id: 'scan-sensor-hd', label: 'FOCUS' },
 };
 const PARAM_LABELS = {
   stability: 'Стабильность',
@@ -364,7 +364,7 @@ function buildScanning() {
     topbar.appendChild(simulationBadge);
   }
 
-  const hdBtn = el('button', 'scan-hd-btn', { text: 'HD' });
+  const hdBtn = el('button', 'scan-hd-btn', { text: 'ФОКУС' });
   hdBtn.id = 'scan-hd-btn';
   hdBtn.addEventListener('click', () => toggleHDMode());
   topbar.appendChild(hdBtn);
@@ -521,7 +521,7 @@ function buildGuideOverlay() {
   return createGuideOverlay({ onClose: toggleGuideOverlay });
 }
 
-/** Toggle HD mode */
+/** Toggle focus mode */
 async function toggleHDMode() {
   if (!scanSession) return;
   await scanSession.toggleHD();

@@ -48,7 +48,7 @@
 | `calibration.js` | Сбор персонального baseline по медианам |
 | `biofield.js` | Преобразование входных метрик в 7 параметров `biofield` + `luminosity` + `confidence` |
 | `awaband-panel.js` | Вертикальная панель параметров и confidence-aware отображение |
-| `segmentation.js` | Ленивое подключение MediaPipe Selfie Segmentation для HD-режима |
+| `segmentation.js` | Ленивое подключение MediaPipe Selfie Segmentation для режима `ФОКУС` |
 
 Высокоуровневый поток данных:
 
@@ -174,7 +174,7 @@ raw biofield -> EMA smoothing -> aura + panel + result screen
 - каждые 10 кадров: `AuraRenderer.detectFaceFromCanvas()` обновляет `faceX`, `faceY`, `faceScale`, `faceDetected`;
 - каждые 15 кадров: пересчет vitals, voice, vibraimage, emotions, baseline, biofield и панели;
 - каждые 30 кадров: обновление таймера HUD;
-- каждые 3 кадра в HD-режиме: запрос маски сегментации.
+- каждые 3 кадра в режиме `ФОКУС`: запрос маски сегментации.
 
 ### 5.3 Потеря лица
 
@@ -645,9 +645,9 @@ smiling = smileSmoothed > 0.2
 smileIntensity = round(smileSmoothed * 100)
 ```
 
-### 10.3 HD segmentation
+### 10.3 Segmentation / режим `ФОКУС`
 
-`segmentation.js` не входит в базовую логику. Это опциональный HD-режим:
+`segmentation.js` не входит в базовую логику. Это опциональный режим `ФОКУС`:
 
 - лениво грузит `@mediapipe/selfie_segmentation` с CDN `jsdelivr`;
 - при успешной загрузке получает mask кадра;
@@ -1089,7 +1089,7 @@ beatDuration = 60 / hr
 - `HRV`, `LF/HF` и `coherence` считаются по коротким окнам, поэтому могут быть нестабильны;
 - `vibraimage` чувствителен к компрессии, автоэкспозиции, роллинг-шаттеру и шуму матрицы;
 - voice metrics зависят от микрофона, шумоподавления ОС, браузера и акустики комнаты;
-- HD mode тянет модель с CDN и не гарантирован офлайн;
+- режим `ФОКУС` тянет модель с CDN и не гарантирован офлайн;
 - результат сохраняется только как PNG, без сырых метрик и без истории измерения.
 
 ### 15.2 Когда значения особенно шумные

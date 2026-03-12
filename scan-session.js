@@ -304,7 +304,7 @@ export class ScanSession {
     } else {
       this.hdModeState = 'error';
       this.applyHdButtonState(this.hdModeState);
-      this.showToast('HD недоступен — загрузка не удалась');
+      this.showToast('Режим "Фокус" недоступен — загрузка не удалась');
       this.segmentation = null;
     }
 
@@ -562,7 +562,7 @@ export class ScanSession {
   applyHdButtonState(state) {
     if (!this.hdButton) return;
     this.hdButton.classList.remove('active', 'loading');
-    this.hdButton.textContent = 'HD';
+    this.hdButton.textContent = 'ФОКУС';
     if (state === 'active') {
       this.hdButton.classList.add('active');
     } else if (state === 'loading') {

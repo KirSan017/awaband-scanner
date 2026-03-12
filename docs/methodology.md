@@ -80,7 +80,7 @@
 
 Ключевые сущности:
 
-- sensor statuses: `CAM`, `MIC`, `FACE`, `PULSE`, `HD`
+- sensor statuses: `CAM`, `MIC`, `FACE`, `PULSE`, `FOCUS`
 - `quality.scanState`: `full`, `partial`, `unavailable`
 - `quality.scanConfidence`
 - `retainedParameters`
@@ -92,6 +92,7 @@
 - `retained` означает, что шкала удержана от предыдущего стабильного кадра;
 - низкий `confidence` может скрыть число на панели, даже если столбик ещё виден;
 - silent mode не означает "всё стало нейтральным": часть шкал пересчитывается по camera/motion fallback-правилам.
+- `FOCUS` — это вспомогательный visual mode с сегментацией человека; он не меняет формулы шкал напрямую, но может помочь удерживать пользователя как главный объект в сложном фоне.
 
 ## 5. Result UX
 
